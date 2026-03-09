@@ -657,7 +657,7 @@ local function RegisterWithChallenge()
         end,
         onIncoming = function(from, gameName)
             ShowIncomingView(from, gameName)
-            if PhoneBattleshipGame.ForceShow then PhoneBattleshipGame.ForceShow() end
+            if PhoneBattleshipGame.ForceShow then PhoneBattleshipGame.ForceShow(from, gameName) end
         end,
         onResponse = function(accepted, reason) end,
         onSessionEnd = function(reason) ShowSelectView() end,

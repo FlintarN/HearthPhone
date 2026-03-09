@@ -427,7 +427,7 @@ local function RegisterWithChallenge()
         -- Per-game UI callbacks (so multiple games can coexist)
         onIncoming = function(from, gameName)
             ShowIncomingView(from, gameName)
-            if PhoneTicTacToeGame.ForceShow then PhoneTicTacToeGame.ForceShow() end
+            if PhoneTicTacToeGame.ForceShow then PhoneTicTacToeGame.ForceShow(from, gameName) end
         end,
         onResponse = function(accepted, reason)
             -- game onStart handles the transition to game view

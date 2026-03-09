@@ -1,7 +1,7 @@
 ## Interface: 120001
 ## Title: HearthPhone
 ## Notes: A phone-style UI panel for quick access to Blizzard panels
-## Author: Andreas
+## Author: FlintarN
 ## Version: 0.1
 ## SavedVariables: HearthPhoneDB WowSoFitDB
 

@@ -37,7 +37,7 @@ function PhoneGalleryApp:Init(parentFrame)
 
     galleryScroll = CreateFrame("ScrollFrame", nil, galleryView)
     galleryScroll:SetPoint("TOPLEFT", 0, 0)
-    galleryScroll:SetPoint("BOTTOMRIGHT", 0, 26)
+    galleryScroll:SetPoint("BOTTOMRIGHT", 0, 74)
     galleryScroll:EnableMouseWheel(true)
     galleryScroll:SetScript("OnMouseWheel", function(self, delta)
         local cur = self:GetVerticalScroll()
@@ -75,6 +75,62 @@ function PhoneGalleryApp:Init(parentFrame)
     if abf then addBtnFs:SetFont(abf, 9, "") end
 
     addBtn:SetScript("OnClick", function() ShowAddView() end)
+
+    -- "Clear Home Wallpaper" button
+    local clearHomeBtn = CreateFrame("Button", nil, galleryView)
+    clearHomeBtn:SetSize(170, 20)
+    clearHomeBtn:SetPoint("BOTTOM", addBtn, "TOP", 0, 4)
+
+    local clearHomeBg = clearHomeBtn:CreateTexture(nil, "BACKGROUND")
+    clearHomeBg:SetAllPoints()
+    clearHomeBg:SetTexture(WHITE)
+    clearHomeBg:SetVertexColor(0.35, 0.15, 0.15, 1)
+
+    local clearHomeHl = clearHomeBtn:CreateTexture(nil, "HIGHLIGHT")
+    clearHomeHl:SetAllPoints()
+    clearHomeHl:SetTexture(WHITE)
+    clearHomeHl:SetVertexColor(1, 1, 1, 0.1)
+
+    local clearHomeFs = clearHomeBtn:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    clearHomeFs:SetPoint("CENTER")
+    clearHomeFs:SetText("|cffff8888Clear Home Wallpaper|r")
+    local chf = clearHomeFs:GetFont()
+    if chf then clearHomeFs:SetFont(chf, 9, "") end
+
+    clearHomeBtn:SetScript("OnClick", function()
+        HearthPhoneDB = HearthPhoneDB or {}
+        HearthPhoneDB.homeWallpaper = nil
+        HearthPhoneDB.homeWallpaperCrop = nil
+        PhoneGalleryApp:ApplyWallpapers()
+    end)
+
+    -- "Clear Lock Wallpaper" button
+    local clearLockBtn = CreateFrame("Button", nil, galleryView)
+    clearLockBtn:SetSize(170, 20)
+    clearLockBtn:SetPoint("BOTTOM", clearHomeBtn, "TOP", 0, 4)
+
+    local clearLockBg = clearLockBtn:CreateTexture(nil, "BACKGROUND")
+    clearLockBg:SetAllPoints()
+    clearLockBg:SetTexture(WHITE)
+    clearLockBg:SetVertexColor(0.35, 0.15, 0.15, 1)
+
+    local clearLockHl = clearLockBtn:CreateTexture(nil, "HIGHLIGHT")
+    clearLockHl:SetAllPoints()
+    clearLockHl:SetTexture(WHITE)
+    clearLockHl:SetVertexColor(1, 1, 1, 0.1)
+
+    local clearLockFs = clearLockBtn:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    clearLockFs:SetPoint("CENTER")
+    clearLockFs:SetText("|cffff8888Clear Lock Wallpaper|r")
+    local clf = clearLockFs:GetFont()
+    if clf then clearLockFs:SetFont(clf, 9, "") end
+
+    clearLockBtn:SetScript("OnClick", function()
+        HearthPhoneDB = HearthPhoneDB or {}
+        HearthPhoneDB.lockWallpaper = nil
+        HearthPhoneDB.lockWallpaperCrop = nil
+        PhoneGalleryApp:ApplyWallpapers()
+    end)
 
     ---------------------------------------------------------------------------
     -- Add Image view

@@ -142,9 +142,9 @@ end
 local function UpdateDisplay()
     if not dpsFs then return end
 
-    local dur = duration
+    local dur = tonumber(duration) or 0
     if not useNativeDM and inCombat and startTime > 0 then
-        dur = GetTime() - startTime
+        dur = (tonumber(GetTime()) or 0) - startTime
     end
     dur = math.max(dur, 1)
 
@@ -374,7 +374,7 @@ local function OnCombatEnd()
         PollNativeDM()
     else
         if startTime > 0 then
-            duration = GetTime() - startTime
+            duration = (tonumber(GetTime()) or 0) - startTime
         end
     end
 

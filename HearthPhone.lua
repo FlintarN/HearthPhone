@@ -260,9 +260,28 @@ zoneText:SetJustifyH("LEFT")
 zoneText:SetWordWrap(false)
 zoneText:SetTextColor(0.6, 0.6, 0.65, 1)
 
-local function UpdateStatusBar()
+-- Shared time formatting: respects clock format + timezone offset
+-- Stored globally so settings and other files can use it too
+function HearthPhone_GetTime()
     local h, m = GetGameTime()
-    timeText:SetText(format("%02d:%02d", h, m))
+    local offset = HearthPhoneDB and HearthPhoneDB.timezoneOffset or 0
+    if offset ~= 0 then
+        h = h + offset
+        if h >= 24 then h = h - 24
+        elseif h < 0 then h = h + 24 end
+    end
+    local use12h = HearthPhoneDB and HearthPhoneDB.clock12h
+    if use12h then
+        local suffix = h >= 12 and "PM" or "AM"
+        local h12 = h % 12
+        if h12 == 0 then h12 = 12 end
+        return format("%d:%02d %s", h12, m, suffix)
+    end
+    return format("%02d:%02d", h, m)
+end
+
+local function UpdateStatusBar()
+    timeText:SetText(HearthPhone_GetTime())
 
     local gold = floor(GetMoney() / 10000)
     goldText:SetText(gold .. "g")
@@ -572,15 +591,17 @@ homeBtnHl:SetPoint("CENTER")
 homeBtnHl:SetTexture("Interface\\Buttons\\WHITE8x8")
 homeBtnHl:SetVertexColor(0.5, 0.5, 0.6, 0.3)
 
--- Lock screen overlay
+-- Phone state: "lock" → "pin" → "unlocked"
 local ToggleLock -- forward declaration
 local notifBanner, notifConvoId, notifTimer -- forward declarations
+local phoneState = "lock"  -- "lock", "pin", "unlocked"
+
+-- Lock screen (wallpaper + time, tap to unlock or show PIN)
 local lockScreen = CreateFrame("Frame", nil, screen)
 lockScreen:SetPoint("TOPLEFT", -4, 4)
 lockScreen:SetPoint("BOTTOMRIGHT", 4, -4)
 lockScreen:SetFrameLevel(screen:GetFrameLevel() + 20)
-lockScreen:EnableMouse(true) -- block clicks through to apps
-lockScreen:SetScript("OnMouseDown", function() ToggleLock() end)
+lockScreen:EnableMouse(true)
 
 -- Solid black fallback behind the lock gallery image
 local lockBgFallback = lockScreen:CreateTexture(nil, "BACKGROUND", nil, 0)
@@ -618,26 +639,209 @@ lockDate:SetTextColor(0.5, 0.5, 0.55, 1)
 local ldFont = lockDate:GetFont()
 if ldFont then lockDate:SetFont(ldFont, 9, "") end
 
-local phoneLocked = true
+local phoneLocked = true  -- kept for backward compat with other code that checks this
+
+---------------------------------------------------------------------------
+-- PIN pad for lock screen (consolidated into pin table to save locals)
+---------------------------------------------------------------------------
+local pin = {
+    entry = "",
+    DOT_COUNT = 4,
+    BTN_SIZE = 32,
+    BTN_GAP = 4,
+}
+
+pin.frame = CreateFrame("Frame", nil, lockScreen)
+pin.frame:SetPoint("TOPLEFT")
+pin.frame:SetPoint("BOTTOMRIGHT")
+pin.frame:SetFrameLevel(lockScreen:GetFrameLevel() + 2)
+pin.frame:EnableMouse(true)
+pin.frame:Hide()
+
+pin.dots = lockScreen:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+pin.dots:SetPoint("CENTER", lockScreen, "CENTER", 0, 50)
+pin.dots:SetTextColor(0.9, 0.9, 0.95, 1)
+do local f = pin.dots:GetFont(); if f then pin.dots:SetFont(f, 20, "OUTLINE") end end
+
+pin.status = lockScreen:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+pin.status:SetPoint("BOTTOM", pin.dots, "TOP", 0, 4)
+pin.status:SetTextColor(0.6, 0.6, 0.65, 1)
+
+pin.error = lockScreen:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+pin.error:SetPoint("TOP", pin.dots, "BOTTOM", 0, -4)
+pin.error:SetTextColor(0.9, 0.3, 0.3, 1)
+
+local function HasPin()
+    return HearthPhoneDB and HearthPhoneDB.pin and HearthPhoneDB.pin ~= ""
+end
+
+local function UpdatePinDots()
+    local dots = ""
+    for i = 1, pin.DOT_COUNT do
+        dots = dots .. (i <= #pin.entry and "|cffffffffo|r " or "|cff555555o|r ")
+    end
+    pin.dots:SetText(dots)
+end
+
+local ResetPinTimeout  -- forward declaration, defined after SetPhoneState
+local pendingNotifRoute = nil  -- convoId to navigate to after PIN unlock
+local OnPendingRoute = nil     -- callback set by InitNotifClick to handle routing
+
+local function OnPinDigit(digit)
+    if #pin.entry >= pin.DOT_COUNT then return end
+    pin.entry = pin.entry .. digit
+    pin.error:SetText("")
+    ResetPinTimeout()
+    UpdatePinDots()
+    if #pin.entry == pin.DOT_COUNT then
+        C_Timer.After(0.15, function()
+            if pin.entry == HearthPhoneDB.pin then
+                pin.entry = ""
+                ToggleLock()
+                if pendingNotifRoute and OnPendingRoute then
+                    local id = pendingNotifRoute
+                    pendingNotifRoute = nil
+                    OnPendingRoute(id)
+                end
+            else
+                pin.entry = ""
+                UpdatePinDots()
+                pin.error:SetText("Wrong PIN")
+            end
+        end)
+    end
+end
+
+local function OnPinBackspace()
+    if #pin.entry > 0 then
+        pin.entry = pin.entry:sub(1, -2)
+        pin.error:SetText("")
+        ResetPinTimeout()
+        UpdatePinDots()
+    end
+end
+
+do
+    local padKeys = { "1","2","3","4","5","6","7","8","9","","0","<" }
+    for i, key in ipairs(padKeys) do
+        if key ~= "" then
+            local row = math.floor((i - 1) / 3)
+            local col = (i - 1) % 3
+            local x = (col - 1) * (pin.BTN_SIZE + pin.BTN_GAP)
+            local y = -10 - row * (pin.BTN_SIZE + pin.BTN_GAP)
+            local btn = CreateFrame("Button", nil, pin.frame)
+            btn:SetPoint("TOP", pin.dots, "BOTTOM", x, y - 10)
+            btn:SetSize(pin.BTN_SIZE, pin.BTN_SIZE)
+            local bg = btn:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetTexture("Interface\\Buttons\\WHITE8x8")
+            bg:SetVertexColor(0.2, 0.22, 0.3, 0.8)
+            local txt = btn:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+            txt:SetPoint("CENTER")
+            txt:SetText(key)
+            txt:SetTextColor(0.9, 0.9, 0.95, 1)
+            local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints()
+            hl:SetTexture("Interface\\Buttons\\WHITE8x8")
+            hl:SetVertexColor(0.4, 0.45, 0.55, 0.3)
+            if key == "<" then
+                btn:SetScript("OnClick", OnPinBackspace)
+            else
+                local digit = key
+                btn:SetScript("OnClick", function() OnPinDigit(digit) end)
+            end
+        end
+    end
+end
+
+local function ShowPinPad()
+    pin.entry = ""
+    pin.error:SetText("")
+    pin.status:SetText("Enter PIN")
+    UpdatePinDots()
+    pin.frame:Show()
+    pin.dots:Show()
+    pin.status:Show()
+    pin.error:Show()
+end
+
+local function HidePinPad()
+    pinPadActive = false
+    pin.frame:Hide()
+    pin.dots:Hide()
+    pin.status:Hide()
+    pin.error:Hide()
+end
+
+local pinTimeout = nil
+
+local function SetPhoneState(state)
+    phoneState = state
+    phoneLocked = (state ~= "unlocked")
+    lockScreen:SetShown(state == "lock" or state == "pin")
+    -- Cancel any existing PIN timeout
+    if pinTimeout then pinTimeout:Cancel(); pinTimeout = nil end
+    if state == "lock" then
+        HidePinPad()
+        pendingNotifRoute = nil
+        lockTime:SetPoint("CENTER", 0, 20)
+        lockZone:SetShown(true)
+        lockDate:SetShown(true)
+    elseif state == "pin" then
+        ShowPinPad()
+        lockTime:SetPoint("CENTER", 0, 110)
+        lockZone:SetShown(false)
+        lockDate:SetShown(false)
+        -- Auto-return to lock screen after 10 seconds of inactivity
+        pinTimeout = C_Timer.NewTimer(10, function()
+            if phoneState == "pin" then
+                SetPhoneState("lock")
+            end
+        end)
+    elseif state == "unlocked" then
+        HidePinPad()
+        notifBanner:Hide()
+        notifConvoId = nil
+        if notifTimer then notifTimer:Cancel(); notifTimer = nil end
+        HearthPhone_ResetActivity()
+    end
+end
 
 local function UpdateLockScreen()
-    local h, m = GetGameTime()
-    lockTime:SetText(format("%02d:%02d", h, m))
+    lockTime:SetText(HearthPhone_GetTime())
     lockZone:SetText(GetMinimapZoneText() or "")
     lockDate:SetText(date("%A"))
 end
 
+ResetPinTimeout = function()
+    if pinTimeout then pinTimeout:Cancel() end
+    pinTimeout = C_Timer.NewTimer(10, function()
+        if phoneState == "pin" then
+            SetPhoneState("lock")
+        end
+    end)
+end
+
+-- Tap lock screen → unlock (no PIN) or show PIN pad (has PIN)
+lockScreen:SetScript("OnMouseDown", function()
+    if phoneState == "pin" then
+        return  -- let PIN buttons handle it
+    end
+    if HasPin() then
+        SetPhoneState("pin")
+    else
+        SetPhoneState("unlocked")
+    end
+end)
+
+-- ToggleLock: called by home button and PIN success
 ToggleLock = function()
-    phoneLocked = not phoneLocked
-    lockScreen:SetShown(phoneLocked)
-    if phoneLocked then
+    if phoneState == "unlocked" then
+        SetPhoneState("lock")
         UpdateLockScreen()
         ShowPage("home")
     else
-        -- Dismiss sticky lock-screen notification on unlock
-        notifBanner:Hide()
-        notifConvoId = nil
-        if notifTimer then notifTimer:Cancel(); notifTimer = nil end
+        SetPhoneState("unlocked")
     end
 end
 
@@ -772,6 +976,35 @@ function HearthPhone_Vibrate()
 end
 
 -- Exposed globally so other modules (e.g. PhoneSocial) can trigger notifications
+-- Map convoId prefix to WoW ChatTypeInfo key
+local NOTIF_CHAT_TYPES = {
+    dm       = "WHISPER",
+    guild    = "GUILD",
+    party    = "PARTY",
+    raid     = "RAID",
+    instance = "INSTANCE_CHAT",
+}
+local NOTIF_SPECIAL_COLORS = {
+    social = { 0.25, 0.80, 0.65 },  -- teal
+    game   = { 0.95, 0.70, 0.20 },  -- gold/amber
+}
+
+local function GetNotifColor(convoId)
+    if not convoId then
+        local info = ChatTypeInfo["WHISPER"]
+        return { info.r, info.g, info.b }
+    end
+    local prefix = convoId:match("^(%a+)")
+    if NOTIF_SPECIAL_COLORS[prefix] then return NOTIF_SPECIAL_COLORS[prefix] end
+    local chatType = NOTIF_CHAT_TYPES[prefix]
+    if chatType then
+        local info = ChatTypeInfo[chatType]
+        if info then return { info.r, info.g, info.b } end
+    end
+    local info = ChatTypeInfo["WHISPER"]
+    return { info.r, info.g, info.b }
+end
+
 local function ShowNotification(senderName, message, convoId)
     -- Don't show if we're already looking at this conversation
     if currentPage == "gchat" and activeConvo == convoId then return end
@@ -780,37 +1013,55 @@ local function ShowNotification(senderName, message, convoId)
     -- Don't show if phone is hidden
     if not phone:IsVisible() then return end
 
-    notifSender:SetText("|cff40c0ff" .. senderName .. "|r")
-    local preview = message
-    if #preview > 35 then preview = preview:sub(1, 33) .. ".." end
-    notifMsg:SetText(preview)
+    -- Check notification settings
+    local showBanner = not (HearthPhoneDB and HearthPhoneDB.muteBanners)
+    local doVibrate = not (HearthPhoneDB and HearthPhoneDB.muteVibration)
+
+    if not showBanner and not doVibrate then return end
+
     notifConvoId = convoId
-    notifBanner:Show()
+
+    if showBanner then
+        local clr = GetNotifColor(convoId)
+        notifBg:SetVertexColor(clr[1] * 0.15, clr[2] * 0.15, clr[3] * 0.15, 0.97)
+        notifBorderTop:SetVertexColor(clr[1], clr[2], clr[3], 0.7)
+        notifBorderBot:SetVertexColor(clr[1], clr[2], clr[3], 0.7)
+        notifSender:SetText("|cff" .. string.format("%02x%02x%02x", clr[1] * 255, clr[2] * 255, clr[3] * 255) .. senderName .. "|r")
+        local preview = message
+        if #preview > 35 then preview = preview:sub(1, 33) .. ".." end
+        notifMsg:SetText(preview)
+        notifBanner:Show()
+    end
 
     -- Vibrate the phone
-    StartVibrate()
+    if doVibrate then
+        StartVibrate()
+    end
 
     -- Auto-hide: stay permanently when locked, 8 seconds when unlocked
-    if notifTimer then notifTimer:Cancel() end
-    if not phoneLocked then
-        notifTimer = C_Timer.NewTimer(8, function()
-            HideNotification()
-        end)
+    if showBanner then
+        if notifTimer then notifTimer:Cancel() end
+        if not phoneLocked then
+            notifTimer = C_Timer.NewTimer(8, function()
+                HideNotification()
+            end)
+        end
     end
 end
 
 -- Global reference so other modules can trigger notifications
 HearthPhoneNotify = ShowNotification
 
-notifBanner:SetScript("OnClick", function()
-    local id = notifConvoId
-    HideNotification()
-    if id then
-        if phoneLocked then
-            phoneLocked = false
-            lockScreen:Hide()
+-- Notification click handler — set up later via InitNotifClick() after conversations system exists
+local function InitNotifClick(conversations, GetConvo, OpenConvo)
+    local function RouteToNotif(id)
+        -- Game challenge notification
+        local gamePage = id:match("^game:(.+)$")
+        if gamePage then
+            ShowPage(gamePage)
+            return
         end
-        -- Social app mention notification — route to social app
+        -- Social mention notification
         local socialPostId = id:match("^social:(.+)$")
         if socialPostId then
             ShowPage("social")
@@ -819,7 +1070,6 @@ notifBanner:SetScript("OnClick", function()
             end
             return
         end
-        -- Ensure conversation exists before opening
         if not conversations[id] then
             local name = id:match("^dm:(.+)$")
             if name then
@@ -837,9 +1087,28 @@ notifBanner:SetScript("OnClick", function()
             end
         end
         ShowPage("gchat")
-        OpenConvo(id)
+        pcall(OpenConvo, id)
     end
-end)
+
+    -- Set the callback for pending routes after PIN unlock
+    OnPendingRoute = RouteToNotif
+
+    notifBanner:SetScript("OnClick", function()
+        local id = notifConvoId
+        HideNotification()
+        if id then
+            if phoneLocked then
+                if HasPin() then
+                    pendingNotifRoute = id
+                    SetPhoneState("pin")
+                    return
+                end
+                SetPhoneState("unlocked")
+            end
+            RouteToNotif(id)
+        end
+    end)
+end
 
 ---------------------------------------------------------------------------
 -- Home screen widget (clock + location, top row)
@@ -882,8 +1151,7 @@ local DAY_NAMES = {"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","
 local MONTH_NAMES = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"}
 
 local function UpdateWidget()
-    local h, m = GetGameTime()
-    widgetTime:SetText(format("%02d:%02d", h, m))
+    widgetTime:SetText(HearthPhone_GetTime())
     widgetZone:SetText(GetMinimapZoneText() or "")
 
     -- Real-world date
@@ -1029,13 +1297,23 @@ initFrame:SetScript("OnEvent", function(self)
     end
 
     -- Give games a way to force-show their page (for incoming challenges)
-    PhoneTicTacToeGame.ForceShow = function()
+    -- If locked, show notification instead of navigating directly
+    local function GameForceShow(page, from, gameName)
         phone:Show()
-        ShowPage("tictactoe")
+        if not phoneLocked then
+            ShowPage(page)
+        else
+            -- Show a notification; clicking it will route to the game page
+            local label = gameName or page
+            ShowNotification("Game Challenge", (from or "Someone") .. " wants to play " .. label, "game:" .. page)
+        end
     end
-    PhoneBattleshipGame.ForceShow = function()
-        phone:Show()
-        ShowPage("battleship")
+
+    PhoneTicTacToeGame.ForceShow = function(from, gameName)
+        GameForceShow("tictactoe", from, gameName)
+    end
+    PhoneBattleshipGame.ForceShow = function(from, gameName)
+        GameForceShow("battleship", from, gameName)
     end
 end)
 
@@ -1059,6 +1337,8 @@ end
 
 -- Initialize guild chat conversation
 GetConvo("guild", "Guild Chat", "GUILD")
+
+-- InitNotifClick called later, after OpenConvo is defined
 
 -- Helper: get class color hex for a player name
 local function GetClassColorHex(classFile)
@@ -1224,6 +1504,9 @@ local function OpenConvo(id)
     chatView:Show()
     chatInput:SetFocus()
 end
+
+-- Wire up the notification click handler now that conversations, GetConvo, and OpenConvo all exist
+InitNotifClick(conversations, GetConvo, OpenConvo)
 
 local function CloseConvo()
     activeConvo = nil
@@ -1971,13 +2254,27 @@ phone:SetScript("OnEvent", function(self, event)
             self:ClearAllPoints()
             self:SetPoint(HearthPhoneDB.point, UIParent, HearthPhoneDB.relPoint, HearthPhoneDB.x, HearthPhoneDB.y)
         end
+        if HearthPhoneDB.phoneScale then
+            self:SetScale(HearthPhoneDB.phoneScale)
+        end
         -- Apply saved gallery images
         PhoneGalleryApp:ApplyWallpapers()
     end
     UpdateStatusBar()
 end)
 
--- Update time + fitness page
+-- Auto-lock: track last interaction and lock after timeout
+HearthPhone_LastActivity = GetTime()
+
+function HearthPhone_ResetActivity()
+    HearthPhone_LastActivity = GetTime()
+end
+
+-- Hook the screen frame to detect any mouse interaction
+screen:HookScript("OnMouseDown", HearthPhone_ResetActivity)
+screen:HookScript("OnMouseUp", HearthPhone_ResetActivity)
+
+-- Update time + fitness page + auto-lock
 local elapsed = 0
 phone:SetScript("OnUpdate", function(self, dt)
     elapsed = elapsed + dt
@@ -1987,6 +2284,16 @@ phone:SetScript("OnUpdate", function(self, dt)
         UpdateWidget()
         if phoneLocked then UpdateLockScreen() end
         WowSoFitApp:Update()
+        -- Auto-lock check
+        local timeout = HearthPhoneDB and HearthPhoneDB.autoLockSeconds or 0
+        if timeout > 0 and not phoneLocked and phone:IsVisible() then
+            local idle = GetTime() - HearthPhone_LastActivity
+            if idle >= timeout then
+                SetPhoneState("lock")
+                UpdateLockScreen()
+                ShowPage("home")
+            end
+        end
     end
 end)
 
@@ -1996,26 +2303,17 @@ SlashCmdList["PHONETEST"] = function()
     ShowNotification("TestFriend", "Hey, are you there?", "dm:TestFriend")
 end
 
--- Test command: fake a social @mention notification (creates a real post)
+-- Test command: fake a social @mention notification (no persistent post)
 SLASH_PHONETESTMENTION1 = "/phonetestmention"
 SlashCmdList["PHONETESTMENTION"] = function()
     local myName = UnitName("player") or "You"
-    -- Create a fake post that mentions the player
-    local db = HearthPhoneDB and HearthPhoneDB.social
-    if db and db.posts then
-        local post = {
-            id = time() * 1000 + math.random(999),
-            author = "TestUser-TestRealm",
-            authorClass = "MAGE",
-            text = "Hey @" .. myName .. " check this out!",
-            timestamp = time(),
-            comments = {},
-        }
-        table.insert(db.posts, 1, post)
-        if PhoneSocialApp.RefreshFeed then PhoneSocialApp:RefreshFeed() end
-        ShowNotification("[Social] TestUser", "mentioned you: Hey @" .. myName .. " check...", "social:" .. post.id)
-        print("|cff00ccff[Phone]|r Created test mention post. Click the notification!")
-    end
+    ShowNotification("[Social] TestUser", "mentioned you: Hey @" .. myName .. " check...", "social:0")
 end
 
-print("|cff00ccff[Phone]|r Loaded! Type /phone to toggle. /phonetest to test notifications.")
+-- Test command: fake a game challenge notification
+SLASH_PHONETESTGAME1 = "/phonetestgame"
+SlashCmdList["PHONETESTGAME"] = function()
+    ShowNotification("Game Challenge", "TestPlayer wants to play Tic Tac Toe", "game:tictactoe")
+end
+
+print("|cff00ccff[Phone]|r Loaded! Type /phone to toggle. /phonetest, /phonetestmention, /phonetestgame to test notifications.")
