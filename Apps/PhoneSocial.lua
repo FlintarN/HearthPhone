@@ -56,6 +56,20 @@ local function GetMyName()
     return name .. "-" .. realm
 end
 
+-- Track all characters on this account so we can recognize our own posts across alts
+local function RegisterMyCharacter()
+    local db = GetDB()
+    db.myCharacters = db.myCharacters or {}
+    db.myCharacters[GetMyName()] = true
+end
+
+local function IsMe(authorName)
+    local db = GetDB()
+    if authorName == GetMyName() then return true end
+    if db.myCharacters and db.myCharacters[authorName] then return true end
+    return false
+end
+
 local function GetMyClass()
     local _, cls = UnitClass("player")
     return cls or "WARRIOR"
@@ -292,7 +306,7 @@ local function EditComment(postIdx, commentIdx, newText)
     if not post then return end
     local comment = post.comments and post.comments[commentIdx]
     if not comment then return end
-    if comment.author ~= GetMyName() then return end
+    if not IsMe(comment.author) then return end
     comment.text = newText
     comment.editedAt = time()
     -- Broadcast edit with editedAt so others know this is newer
@@ -312,7 +326,7 @@ local function DeleteComment(postIdx, commentIdx)
     if not post then return end
     local comment = post.comments and post.comments[commentIdx]
     if not comment then return end
-    if comment.author ~= GetMyName() then return end
+    if not IsMe(comment.author) then return end
     local author = comment.author
     local ts = comment.timestamp
     local deletedAt = time()
@@ -330,7 +344,7 @@ local function EditPost(postIdx, newText)
     local db = GetDB()
     local post = db.posts[postIdx]
     if not post then return end
-    if post.author ~= GetMyName() then return end
+    if not IsMe(post.author) then return end
     post.text = newText
     post.editedAt = time()
     -- Broadcast edit
@@ -341,7 +355,7 @@ local function DeletePost(postIdx)
     local db = GetDB()
     local post = db.posts[postIdx]
     if not post then return end
-    if post.author ~= GetMyName() then return end
+    if not IsMe(post.author) then return end
     local deletedAt = time()
     -- Tombstone the post itself
     local postTombKey = "post:" .. post.id
@@ -362,6 +376,18 @@ local function GetPostsByAuthor(authorName)
     local result = {}
     for i, post in ipairs(db.posts) do
         if post.author == authorName then
+            table.insert(result, { idx = i, post = post })
+        end
+    end
+    return result
+end
+
+-- Get posts from all characters on this account
+local function GetMyPosts()
+    local db = GetDB()
+    local result = {}
+    for i, post in ipairs(db.posts) do
+        if IsMe(post.author) then
             table.insert(result, { idx = i, post = post })
         end
     end
@@ -1110,7 +1136,7 @@ function PhoneSocialApp:RefreshFeed()
             row.postIdx = i
             row:Show()
 
-            if post.author == myName then
+            if IsMe(post.author) then
                 row.editPostBtn:Show()
                 row.delPostBtn:Show()
                 local idx = i
@@ -1208,8 +1234,32 @@ local function BuildProfile(parentFrame)
     bioEmojiBtn:SetPoint("TOPLEFT", bioContainer, "BOTTOMLEFT", 0, -2)
     bioEmojiBtn:Hide()
 
+    local sepProfile = CreateSeparator(parentFrame, -126)
+    local postsLabel = parentFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    postsLabel:SetPoint("TOPLEFT", 6, -132)
+
     -- Edit mode toggle logic
     local profileEditing = false
+    -- Posts scroll
+    local scrollContainer = CreateFrame("Frame", nil, parentFrame)
+    scrollContainer:SetPoint("TOPLEFT", 0, -146)
+    scrollContainer:SetPoint("BOTTOMRIGHT", 0, 0)
+
+    local function UpdateProfileLayout()
+        if profileEditing then
+            -- Push separator, label, and scroll down to make room for emoji button
+            sepProfile:SetPoint("TOPLEFT", 4, -146)
+            sepProfile:SetPoint("TOPRIGHT", -4, -146)
+            postsLabel:SetPoint("TOPLEFT", 6, -152)
+            scrollContainer:SetPoint("TOPLEFT", 0, -166)
+        else
+            sepProfile:SetPoint("TOPLEFT", 4, -126)
+            sepProfile:SetPoint("TOPRIGHT", -4, -126)
+            postsLabel:SetPoint("TOPLEFT", 6, -132)
+            scrollContainer:SetPoint("TOPLEFT", 0, -146)
+        end
+    end
+
     editBtn:SetScript("OnClick", function()
         profileEditing = not profileEditing
         if profileEditing then
@@ -1232,22 +1282,14 @@ local function BuildProfile(parentFrame)
             bioContainer:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.6)
             bioEmojiBtn:Hide()
         end
+        UpdateProfileLayout()
     end)
 
-    CreateSeparator(parentFrame, -126)
-
     -- My posts label
-    local postsLabel = parentFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    postsLabel:SetPoint("TOPLEFT", 6, -132)
     local plf = postsLabel:GetFont()
     if plf then postsLabel:SetFont(plf, 9, "OUTLINE") end
     postsLabel:SetText("|cffaaaaaamyposts|r")
     infoFrame.postsLabel = postsLabel
-
-    -- Posts scroll
-    local scrollContainer = CreateFrame("Frame", nil, parentFrame)
-    scrollContainer:SetPoint("TOPLEFT", 0, -146)
-    scrollContainer:SetPoint("BOTTOMRIGHT", 0, 0)
 
     local scroll, content = MakeScrollFrame(scrollContainer)
     infoFrame.scrollContent = content
@@ -1349,7 +1391,7 @@ function PhoneSocialApp:RefreshProfile()
 
     profileBio:SetText(ReplaceEmojis(db.profile.bio or ""))
 
-    local myPosts = GetPostsByAuthor(myName)
+    local myPosts = GetMyPosts()
     info.postsLabel:SetText("|cffaaaaaaMy Posts (" .. #myPosts .. ")|r")
 
     local contentWidth = info.scrollContent:GetParent():GetWidth() - 12
@@ -1676,7 +1718,7 @@ function PhoneSocialApp:RefreshPostDetail()
     info.textFs:SetText(ReplaceEmojis(post.text))
 
     -- Show edit/delete on own posts
-    local showBtns = post.author == GetMyName()
+    local showBtns = IsMe(post.author)
     if showBtns then
         info.editPostBtn:Show()
         info.delPostBtn:Show()
@@ -1732,7 +1774,7 @@ function PhoneSocialApp:RefreshPostDetail()
             row:SetHeight(28)
 
             -- Show edit/delete only on own comments
-            if c.author == myName then
+            if IsMe(c.author) then
                 row.editBtn:Show()
                 row.delBtn:Show()
                 local commentIdx = i
@@ -1902,10 +1944,7 @@ local function BuildNewPost(parentFrame)
                 CreatePost(txt:trim())
                 newPostInput:SetText("")
                 newPostInput:ClearFocus()
-                statusFs:SetText("|cff44ff44Posted!|r")
-                C_Timer.After(1, function()
-                    if statusFs then statusFs:SetText("") end
-                end)
+                GoBack()
             end
         else
             statusFs:SetText("|cffff4444Write something first.|r")
@@ -2178,6 +2217,7 @@ end
 ---------------------------------------------------------------------------
 function PhoneSocialApp:Init(parentFrame)
     parent = parentFrame
+    RegisterMyCharacter()
 
     -- Title bar with back button
     titleBar = CreateFrame("Frame", nil, parent)
