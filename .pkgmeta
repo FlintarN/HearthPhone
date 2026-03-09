@@ -8,3 +8,4 @@ ignore:
   - README.md
   - LICENSE
   - "*.py"
+  - .gitkeep
