@@ -33,6 +33,7 @@ Apps\PhoneCalendar.lua
 Apps\PhoneDamageMeter.lua
 Apps\PhoneCamera.lua
 Apps\PhoneGallery.lua
+Apps\PhoneSettings.lua
 Apps\PhoneCall.lua
 Apps\WowSoFit.lua
 HearthPhone.lua

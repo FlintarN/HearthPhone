@@ -91,6 +91,11 @@ local apps = {
         page = "gallery",
     },
     {
+        label = "Settings",
+        texture = "Interface\\Icons\\INV_Gizmo_02",
+        page = "settings",
+    },
+    {
         label = "Toys",
         texture = ADDON_PATH .. "IconToys",
         page = "toys",
@@ -460,6 +465,12 @@ agarioPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
 agarioPage:SetPoint("BOTTOMRIGHT", 0, 28)
 agarioPage:Hide()
 
+-- Settings page container
+local settingsPage = CreateFrame("Frame", nil, screen)
+settingsPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
+settingsPage:SetPoint("BOTTOMRIGHT", 0, 28)
+settingsPage:Hide()
+
 -- Phone Call page container
 local phonePage = CreateFrame("Frame", nil, screen)
 phonePage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
@@ -503,6 +514,7 @@ local function ShowPage(page)
     dpsMeterPage:SetShown(page == "dpsmeter")
     cameraPage:SetShown(page == "camera")
     galleryPage:SetShown(page == "gallery")
+    settingsPage:SetShown(page == "settings")
     -- Notify apps of show/hide
     if page == "snake" then PhoneSnakeGame:OnShow() else PhoneSnakeGame:OnHide() end
     if page == "tetris" then PhoneTetrisGame:OnShow() else PhoneTetrisGame:OnHide() end
@@ -532,6 +544,7 @@ local function ShowPage(page)
     if page == "dpsmeter" then PhoneDamageMeterApp:OnShow() else PhoneDamageMeterApp:OnHide() end
     if page == "camera" then PhoneCameraApp:OnShow() else PhoneCameraApp:OnHide() end
     if page == "gallery" then PhoneGalleryApp:OnShow() else PhoneGalleryApp:OnHide() end
+    if page == "settings" then PhoneSettingsApp:OnShow() else PhoneSettingsApp:OnHide() end
 end
 
 ---------------------------------------------------------------------------
@@ -1000,6 +1013,7 @@ initFrame:SetScript("OnEvent", function(self)
         { PhoneDamageMeterApp, dpsMeterPage },
         { PhoneCameraApp, cameraPage },
         { PhoneGalleryApp, galleryPage },
+        { PhoneSettingsApp, settingsPage },
     }
     for _, pair in ipairs(inits) do
         local ok, err = pcall(pair[1].Init, pair[1], pair[2])
