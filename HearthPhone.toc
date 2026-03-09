@@ -36,4 +36,5 @@ Apps\PhoneGallery.lua
 Apps\PhoneSettings.lua
 Apps\PhoneCall.lua
 Apps\WowSoFit.lua
+Apps\PhoneRoguelike.lua
 HearthPhone.lua

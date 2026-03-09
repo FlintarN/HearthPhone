@@ -606,6 +606,25 @@ function PhoneSettingsApp:Init(parentFrame)
     end
     table.insert(controls, { update = UpdateAutoLock })
 
+    -- Rearrange Apps button
+    CreateMenuRow(phoneFrame, "Rearrange Apps", -166, function()
+        local h = PhoneSettingsApp._home
+        if h and h.editMode then
+            h:ExitEditMode()
+        else
+            -- Go to home screen and enter edit mode
+            ShowView("main")
+            if PhoneSettingsApp._showPage then
+                PhoneSettingsApp._showPage("home")
+            end
+            C_Timer.After(0.1, function()
+                if PhoneSettingsApp._home then
+                    PhoneSettingsApp._home:EnterEditMode()
+                end
+            end)
+        end
+    end)
+
     -----------------------------------------------------------------------
     -- Volume subpage (sliders + mute toggles)
     -----------------------------------------------------------------------

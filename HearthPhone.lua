@@ -10,7 +10,7 @@ local BEZEL_INSET_TOP = 60 * (PHONE_HEIGHT / 512)
 local BEZEL_INSET_BOTTOM = 50 * (PHONE_HEIGHT / 512)
 
 local ICON_SIZE = 34
-local ICON_PADDING = 14
+local ICON_PADDING = 10
 local COLS = 4
 local WIDGET_HEIGHT = 40
 local STATUS_BAR_HEIGHT = 18
@@ -171,6 +171,11 @@ local apps = {
         texture = "Interface\\Icons\\INV_Misc_Slime_01",
         page = "agario",
     },
+    {
+        label = "Survivor",
+        texture = ADDON_PATH .. "IconRoguelike",
+        page = "roguelike",
+    },
 }
 
 -- Saved position
@@ -308,262 +313,83 @@ local homePage = CreateFrame("Frame", nil, screen)
 homePage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
 homePage:SetPoint("BOTTOMRIGHT", 0, 28)
 
--- Scrollable home content
-local homeScroll = CreateFrame("ScrollFrame", nil, homePage)
-homeScroll:SetAllPoints()
-homeScroll:EnableMouseWheel(true)
-homeScroll:SetScript("OnMouseWheel", function(self, delta)
-    local cur = self:GetVerticalScroll()
-    local maxS = max(0, (self.contentHeight or 0) - self:GetHeight())
-    local newS = min(maxS, max(0, cur - delta * 40))
-    self:SetVerticalScroll(newS)
-end)
+-- App page frames (consolidated into table to save locals)
+local pg = {}
+local function MakeAppPage(name, globalName)
+    local f = CreateFrame("Frame", globalName, screen)
+    f:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
+    f:SetPoint("BOTTOMRIGHT", 0, 28)
+    f:Hide()
+    pg[name] = f
+end
+MakeAppPage("fitness"); MakeAppPage("snake", "HearthPhoneSnakePage")
+MakeAppPage("gchat"); MakeAppPage("tetris", "HearthPhoneTetrisPage")
+MakeAppPage("tictactoe"); MakeAppPage("music"); MakeAppPage("uber")
+MakeAppPage("candy"); MakeAppPage("notes"); MakeAppPage("2048")
+MakeAppPage("mines"); MakeAppPage("flappy"); MakeAppPage("wordle")
+MakeAppPage("weather"); MakeAppPage("calc"); MakeAppPage("angrybirds")
+MakeAppPage("shooter"); MakeAppPage("templerun"); MakeAppPage("subway")
+MakeAppPage("timer"); MakeAppPage("calendar"); MakeAppPage("dpsmeter")
+MakeAppPage("camera"); MakeAppPage("gallery"); MakeAppPage("battleship")
+MakeAppPage("toys"); MakeAppPage("social"); MakeAppPage("agario")
+MakeAppPage("settings"); MakeAppPage("phone"); MakeAppPage("roguelike")
 
-local homeContent = CreateFrame("Frame", nil, homeScroll)
-homeContent:SetWidth(PHONE_WIDTH - BEZEL_INSET_LEFT - BEZEL_INSET_RIGHT)
-homeContent:SetHeight(400)
-homeScroll:SetScrollChild(homeContent)
+-- Map page names to app objects for OnShow/OnHide
+pg.appMap = {
+    fitness = WowSoFitApp, snake = PhoneSnakeGame, tetris = PhoneTetrisGame,
+    tictactoe = PhoneTicTacToeGame, music = PhoneMusicApp, uber = PhoneUberApp,
+    candy = PhoneCandyCrushGame, notes = PhoneNotesApp, ["2048"] = Phone2048Game,
+    mines = PhoneMinesweeperGame, flappy = PhoneFlappyBirdGame, wordle = PhoneWordleGame,
+    weather = PhoneWeatherApp, calc = PhoneCalculatorApp, angrybirds = PhoneAngryBirdsGame,
+    phone = PhoneCallApp, shooter = PhoneSpaceShooterGame, templerun = PhoneTempleRunGame,
+    subway = PhoneSubwaySurfersGame, battleship = PhoneBattleshipGame, toys = PhoneToysApp,
+    social = PhoneSocialApp, agario = PhoneAgarioGame, timer = PhoneTimerApp,
+    calendar = PhoneCalendarApp, dpsmeter = PhoneDamageMeterApp, camera = PhoneCameraApp,
+    gallery = PhoneGalleryApp, settings = PhoneSettingsApp,
+    roguelike = PhoneRoguelikeGame,
+}
 
--- Fitness page container (leave 28px at bottom for home button)
-local fitnessPage = CreateFrame("Frame", nil, screen)
-fitnessPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-fitnessPage:SetPoint("BOTTOMRIGHT", 0, 28)
-fitnessPage:Hide()
+-- Multi-page home screen state
+local home = {
+    frames = {},       -- page frame containers (1, 2, ...)
+    dots = {},         -- page indicator dot textures
+    dotFrame = nil,    -- frame holding dots
+    buttons = {},      -- all app icon buttons
+    currentIdx = 1,    -- which home page is showing
+    editMode = false,
+    selectedSlot = nil,
+    totalPages = 1,
+    ROWS_PAGE1 = 4,    -- rows on page with widget
+    ROWS_OTHER = 5,    -- rows on pages without widget
+    ROW_HEIGHT = 50,
+    DOT_SIZE = 6,
+    DOT_GAP = 6,
+    widgetPage = 1,    -- which page has the widget
+}
 
--- Snake page container
-local snakePage = CreateFrame("Frame", "HearthPhoneSnakePage", screen)
-snakePage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-snakePage:SetPoint("BOTTOMRIGHT", 0, 28)
-snakePage:Hide()
+function home:SlotsForPage(pageIdx)
+    return (pageIdx == self.widgetPage and self.ROWS_PAGE1 or self.ROWS_OTHER) * COLS
+end
 
--- Guild chat page container
-local gchatPage = CreateFrame("Frame", nil, screen)
-gchatPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-gchatPage:SetPoint("BOTTOMRIGHT", 0, 28)
-gchatPage:Hide()
-
--- Tetris page container
-local tetrisPage = CreateFrame("Frame", "HearthPhoneTetrisPage", screen)
-tetrisPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-tetrisPage:SetPoint("BOTTOMRIGHT", 0, 28)
-tetrisPage:Hide()
-
--- Tic-Tac-Toe page container
-local tictactoePage = CreateFrame("Frame", nil, screen)
-tictactoePage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-tictactoePage:SetPoint("BOTTOMRIGHT", 0, 28)
-tictactoePage:Hide()
-
--- Music page container
-local musicPage = CreateFrame("Frame", nil, screen)
-musicPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-musicPage:SetPoint("BOTTOMRIGHT", 0, 28)
-musicPage:Hide()
-
--- Uber page container
-local uberPage = CreateFrame("Frame", nil, screen)
-uberPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-uberPage:SetPoint("BOTTOMRIGHT", 0, 28)
-uberPage:Hide()
-
--- Candy Crush page container
-local candyPage = CreateFrame("Frame", nil, screen)
-candyPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-candyPage:SetPoint("BOTTOMRIGHT", 0, 28)
-candyPage:Hide()
-
--- Notes page container
-local notesPage = CreateFrame("Frame", nil, screen)
-notesPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-notesPage:SetPoint("BOTTOMRIGHT", 0, 28)
-notesPage:Hide()
-
--- 2048 page container
-local page2048 = CreateFrame("Frame", nil, screen)
-page2048:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-page2048:SetPoint("BOTTOMRIGHT", 0, 28)
-page2048:Hide()
-
--- Minesweeper page container
-local minesPage = CreateFrame("Frame", nil, screen)
-minesPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-minesPage:SetPoint("BOTTOMRIGHT", 0, 28)
-minesPage:Hide()
-
--- Flappy Bird page container
-local flappyPage = CreateFrame("Frame", nil, screen)
-flappyPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-flappyPage:SetPoint("BOTTOMRIGHT", 0, 28)
-flappyPage:Hide()
-
--- Wordle page container
-local wordlePage = CreateFrame("Frame", nil, screen)
-wordlePage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-wordlePage:SetPoint("BOTTOMRIGHT", 0, 28)
-wordlePage:Hide()
-
--- Weather page container
-local weatherPage = CreateFrame("Frame", nil, screen)
-weatherPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-weatherPage:SetPoint("BOTTOMRIGHT", 0, 28)
-weatherPage:Hide()
-
--- Calculator page container
-local calcPage = CreateFrame("Frame", nil, screen)
-calcPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-calcPage:SetPoint("BOTTOMRIGHT", 0, 28)
-calcPage:Hide()
-
--- Angry Birds page container
-local angrybirdsPage = CreateFrame("Frame", nil, screen)
-angrybirdsPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-angrybirdsPage:SetPoint("BOTTOMRIGHT", 0, 28)
-angrybirdsPage:Hide()
-
--- Space Shooter page container
-local shooterPage = CreateFrame("Frame", nil, screen)
-shooterPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-shooterPage:SetPoint("BOTTOMRIGHT", 0, 28)
-shooterPage:Hide()
-
-local templerunPage = CreateFrame("Frame", nil, screen)
-templerunPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-templerunPage:SetPoint("BOTTOMRIGHT", 0, 28)
-templerunPage:Hide()
-
-local subwayPage = CreateFrame("Frame", nil, screen)
-subwayPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-subwayPage:SetPoint("BOTTOMRIGHT", 0, 28)
-subwayPage:Hide()
-
-local timerPage = CreateFrame("Frame", nil, screen)
-timerPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-timerPage:SetPoint("BOTTOMRIGHT", 0, 28)
-timerPage:Hide()
-
-local calendarPage = CreateFrame("Frame", nil, screen)
-calendarPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-calendarPage:SetPoint("BOTTOMRIGHT", 0, 28)
-calendarPage:Hide()
-
-local dpsMeterPage = CreateFrame("Frame", nil, screen)
-dpsMeterPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-dpsMeterPage:SetPoint("BOTTOMRIGHT", 0, 28)
-dpsMeterPage:Hide()
-
-local cameraPage = CreateFrame("Frame", nil, screen)
-cameraPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-cameraPage:SetPoint("BOTTOMRIGHT", 0, 28)
-cameraPage:Hide()
-
--- Gallery page container
-local galleryPage = CreateFrame("Frame", nil, screen)
-galleryPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-galleryPage:SetPoint("BOTTOMRIGHT", 0, 28)
-galleryPage:Hide()
-
--- Battleship page container
-local battleshipPage = CreateFrame("Frame", nil, screen)
-battleshipPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-battleshipPage:SetPoint("BOTTOMRIGHT", 0, 28)
-battleshipPage:Hide()
-
--- Toys page container
-local toysPage = CreateFrame("Frame", nil, screen)
-toysPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-toysPage:SetPoint("BOTTOMRIGHT", 0, 28)
-toysPage:Hide()
-
-local socialPage = CreateFrame("Frame", nil, screen)
-socialPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-socialPage:SetPoint("BOTTOMRIGHT", 0, 28)
-socialPage:Hide()
-
-local agarioPage = CreateFrame("Frame", nil, screen)
-agarioPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-agarioPage:SetPoint("BOTTOMRIGHT", 0, 28)
-agarioPage:Hide()
-
--- Settings page container
-local settingsPage = CreateFrame("Frame", nil, screen)
-settingsPage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-settingsPage:SetPoint("BOTTOMRIGHT", 0, 28)
-settingsPage:Hide()
-
--- Phone Call page container
-local phonePage = CreateFrame("Frame", nil, screen)
-phonePage:SetPoint("TOPLEFT", 0, -(STATUS_BAR_HEIGHT + 6))
-phonePage:SetPoint("BOTTOMRIGHT", 0, 28)
-phonePage:Hide()
+function home:AppYOffset(pageIdx)
+    return pageIdx == self.widgetPage and (WIDGET_HEIGHT + 12) or 4
+end
 
 local homeBtn -- forward declaration
-
 local homeBtnBar -- forward declaration
 
 local function ShowPage(page)
     currentPage = page
     screenBg:SetShown(page == "home")
     homePage:SetShown(page == "home")
-    fitnessPage:SetShown(page == "fitness")
-    snakePage:SetShown(page == "snake")
-    gchatPage:SetShown(page == "gchat")
-    tetrisPage:SetShown(page == "tetris")
-    tictactoePage:SetShown(page == "tictactoe")
-    musicPage:SetShown(page == "music")
-    uberPage:SetShown(page == "uber")
-    candyPage:SetShown(page == "candy")
-    notesPage:SetShown(page == "notes")
-    page2048:SetShown(page == "2048")
-    minesPage:SetShown(page == "mines")
-    flappyPage:SetShown(page == "flappy")
-    wordlePage:SetShown(page == "wordle")
-    weatherPage:SetShown(page == "weather")
-    calcPage:SetShown(page == "calc")
-    angrybirdsPage:SetShown(page == "angrybirds")
-    phonePage:SetShown(page == "phone")
-    shooterPage:SetShown(page == "shooter")
-    templerunPage:SetShown(page == "templerun")
-    subwayPage:SetShown(page == "subway")
-    battleshipPage:SetShown(page == "battleship")
-    toysPage:SetShown(page == "toys")
-    socialPage:SetShown(page == "social")
-    agarioPage:SetShown(page == "agario")
-    timerPage:SetShown(page == "timer")
-    calendarPage:SetShown(page == "calendar")
-    dpsMeterPage:SetShown(page == "dpsmeter")
-    cameraPage:SetShown(page == "camera")
-    galleryPage:SetShown(page == "gallery")
-    settingsPage:SetShown(page == "settings")
-    -- Notify apps of show/hide
-    if page == "snake" then PhoneSnakeGame:OnShow() else PhoneSnakeGame:OnHide() end
-    if page == "tetris" then PhoneTetrisGame:OnShow() else PhoneTetrisGame:OnHide() end
-    if page == "fitness" then WowSoFitApp:OnShow() else WowSoFitApp:OnHide() end
-    if page == "tictactoe" then PhoneTicTacToeGame:OnShow() else PhoneTicTacToeGame:OnHide() end
-    if page == "music" then PhoneMusicApp:OnShow() else PhoneMusicApp:OnHide() end
-    if page == "uber" then PhoneUberApp:OnShow() else PhoneUberApp:OnHide() end
-    if page == "candy" then PhoneCandyCrushGame:OnShow() else PhoneCandyCrushGame:OnHide() end
-    if page == "notes" then PhoneNotesApp:OnShow() else PhoneNotesApp:OnHide() end
-    if page == "2048" then Phone2048Game:OnShow() else Phone2048Game:OnHide() end
-    if page == "mines" then PhoneMinesweeperGame:OnShow() else PhoneMinesweeperGame:OnHide() end
-    if page == "flappy" then PhoneFlappyBirdGame:OnShow() else PhoneFlappyBirdGame:OnHide() end
-    if page == "wordle" then PhoneWordleGame:OnShow() else PhoneWordleGame:OnHide() end
-    if page == "weather" then PhoneWeatherApp:OnShow() else PhoneWeatherApp:OnHide() end
-    if page == "calc" then PhoneCalculatorApp:OnShow() else PhoneCalculatorApp:OnHide() end
-    if page == "angrybirds" then PhoneAngryBirdsGame:OnShow() else PhoneAngryBirdsGame:OnHide() end
-    if page == "phone" then PhoneCallApp:OnShow() else PhoneCallApp:OnHide() end
-    if page == "shooter" then PhoneSpaceShooterGame:OnShow() else PhoneSpaceShooterGame:OnHide() end
-    if page == "templerun" then PhoneTempleRunGame:OnShow() else PhoneTempleRunGame:OnHide() end
-    if page == "subway" then PhoneSubwaySurfersGame:OnShow() else PhoneSubwaySurfersGame:OnHide() end
-    if page == "battleship" then PhoneBattleshipGame:OnShow() else PhoneBattleshipGame:OnHide() end
-    if page == "toys" then PhoneToysApp:OnShow() else PhoneToysApp:OnHide() end
-    if page == "social" then PhoneSocialApp:OnShow() else PhoneSocialApp:OnHide() end
-    if page == "agario" then PhoneAgarioGame:OnShow() else PhoneAgarioGame:OnHide() end
-    if page == "timer" then PhoneTimerApp:OnShow() else PhoneTimerApp:OnHide() end
-    if page == "calendar" then PhoneCalendarApp:OnShow() else PhoneCalendarApp:OnHide() end
-    if page == "dpsmeter" then PhoneDamageMeterApp:OnShow() else PhoneDamageMeterApp:OnHide() end
-    if page == "camera" then PhoneCameraApp:OnShow() else PhoneCameraApp:OnHide() end
-    if page == "gallery" then PhoneGalleryApp:OnShow() else PhoneGalleryApp:OnHide() end
-    if page == "settings" then PhoneSettingsApp:OnShow() else PhoneSettingsApp:OnHide() end
+    for name, frame in pairs(pg) do
+        if name ~= "appMap" then
+            frame:SetShown(name == page)
+        end
+    end
+    for name, app in pairs(pg.appMap) do
+        if name == page then app:OnShow() else app:OnHide() end
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -859,6 +685,10 @@ homeBtnBarBg:SetTexture("Interface\\Buttons\\WHITE8x8")
 homeBtnBarBg:SetVertexColor(0.06, 0.06, 0.08, 0.7)
 
 homeBtn:SetScript("OnClick", function()
+    if home.editMode then
+        home:ExitEditMode()
+        return
+    end
     if currentPage == "home" then
         ToggleLock()
     else
@@ -1113,71 +943,75 @@ end
 ---------------------------------------------------------------------------
 -- Home screen widget (clock + location, top row)
 ---------------------------------------------------------------------------
-local widget = CreateFrame("Frame", nil, homeContent)
+local widget = CreateFrame("Frame", nil, homePage)
 widget:SetPoint("TOPLEFT", 4, -2)
 widget:SetPoint("TOPRIGHT", -4, -2)
 widget:SetHeight(WIDGET_HEIGHT)
 
--- No background — text floats over gallery image with shadows for readability
-
--- Time display
 local widgetTime = widget:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 widgetTime:SetPoint("TOP", 0, -3)
 widgetTime:SetTextColor(1, 1, 1, 1)
-local wtFont = widgetTime:GetFont()
-if wtFont then widgetTime:SetFont(wtFont, 18, "OUTLINE") end
+do local f = widgetTime:GetFont(); if f then widgetTime:SetFont(f, 18, "OUTLINE") end end
 widgetTime:SetShadowColor(0, 0, 0, 0.8)
 widgetTime:SetShadowOffset(1, -1)
 
--- Zone name
 local widgetZone = widget:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 widgetZone:SetPoint("TOP", widgetTime, "BOTTOM", 0, -1)
 widgetZone:SetTextColor(0.9, 0.9, 0.95, 1)
-local wzFont = widgetZone:GetFont()
-if wzFont then widgetZone:SetFont(wzFont, 9, "OUTLINE") end
+do local f = widgetZone:GetFont(); if f then widgetZone:SetFont(f, 9, "OUTLINE") end end
 widgetZone:SetShadowColor(0, 0, 0, 0.8)
 widgetZone:SetShadowOffset(1, -1)
 
--- Date line
 local widgetDate = widget:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 widgetDate:SetPoint("TOP", widgetZone, "BOTTOM", 0, -1)
 widgetDate:SetTextColor(0.95, 0.95, 1, 1)
-local wdtFont = widgetDate:GetFont()
-if wdtFont then widgetDate:SetFont(wdtFont, 8, "OUTLINE") end
+do local f = widgetDate:GetFont(); if f then widgetDate:SetFont(f, 8, "OUTLINE") end end
 widgetDate:SetShadowColor(0, 0, 0, 0.8)
 widgetDate:SetShadowOffset(1, -1)
 
-local DAY_NAMES = {"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"}
-local MONTH_NAMES = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"}
+home.DAY_NAMES = {"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"}
+home.MONTH_NAMES = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"}
 
 local function UpdateWidget()
     widgetTime:SetText(HearthPhone_GetTime())
     widgetZone:SetText(GetMinimapZoneText() or "")
-
-    -- Real-world date
     local d = date("*t")
-    widgetDate:SetText(format("%s, %s %d", DAY_NAMES[d.wday], MONTH_NAMES[d.month], d.day))
+    widgetDate:SetText(format("%s, %s %d", home.DAY_NAMES[d.wday], home.MONTH_NAMES[d.month], d.day))
 end
 
 ---------------------------------------------------------------------------
--- App icon buttons (home page)
+-- Multi-page home system: app grid, dots, swiping, edit mode
 ---------------------------------------------------------------------------
-local APP_Y_OFFSET = WIDGET_HEIGHT + 16
 
-local function CreateAppButton(parent, appData, index)
-    local row = floor((index - 1) / COLS)
-    local col = (index - 1) % COLS
+-- Build an app lookup table keyed by page name
+home.appByPage = {}
+for _, app in ipairs(apps) do
+    if app.page then home.appByPage[app.page] = app end
+end
 
-    local parentWidth = PHONE_WIDTH - BEZEL_INSET_LEFT - BEZEL_INSET_RIGHT - 4
-    local totalIconWidth = COLS * ICON_SIZE + (COLS - 1) * ICON_PADDING
-    local offsetX = (parentWidth - totalIconWidth) / 2
+-- Default layout: fill pages in app table order
+local function BuildDefaultLayout()
+    local layout = {}
+    local pageIdx = 1
+    local slot = 1
+    layout[pageIdx] = {}
+    for _, app in ipairs(apps) do
+        local maxSlots = home:SlotsForPage(pageIdx)
+        if slot > maxSlots then
+            pageIdx = pageIdx + 1
+            slot = 1
+            layout[pageIdx] = {}
+        end
+        layout[pageIdx][slot] = app.page
+        slot = slot + 1
+    end
+    return layout
+end
 
-    local xPos = offsetX + col * (ICON_SIZE + ICON_PADDING)
-    local yPos = -(APP_Y_OFFSET + row * (ICON_SIZE + ICON_PADDING + 14))
-
-    local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+-- Create a single app icon button (unpositioned, reusable)
+local function CreateAppButton(parentFrame, appData)
+    local btn = CreateFrame("Button", nil, parentFrame, "BackdropTemplate")
     btn:SetSize(ICON_SIZE, ICON_SIZE)
-    btn:SetPoint("TOPLEFT", xPos, yPos)
     btn:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -1197,23 +1031,87 @@ local function CreateAppButton(parent, appData, index)
         pcall(function() icon:SetAtlas(appData.icon) end)
     end
 
-    btn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(0.28, 0.28, 0.35, 0.9)
-        self:SetBackdropBorderColor(0.4, 0.4, 0.5, 0.8)
-    end)
-    btn:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(0.18, 0.18, 0.22, 0.9)
-        self:SetBackdropBorderColor(0.25, 0.25, 0.30, 0.6)
-    end)
-
     local label = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     label:SetPoint("TOP", btn, "BOTTOM", 0, -1)
     label:SetText(appData.label)
     label:SetTextColor(0.75, 0.75, 0.8, 1)
-    local fontFile = label:GetFont()
-    if fontFile then label:SetFont(fontFile, 8, "OUTLINE") end
+    do local f = label:GetFont(); if f then label:SetFont(f, 8, "OUTLINE") end end
 
+    -- Edit mode highlight overlays
+    local editGlow = btn:CreateTexture(nil, "OVERLAY")
+    editGlow:SetPoint("TOPLEFT", -2, 2)
+    editGlow:SetPoint("BOTTOMRIGHT", 2, -2)
+    editGlow:SetTexture("Interface\\Buttons\\WHITE8x8")
+    editGlow:SetVertexColor(1, 1, 1, 0.12)
+    editGlow:Hide()
+    btn.editGlow = editGlow
+
+    local selTex = btn:CreateTexture(nil, "OVERLAY", nil, 1)
+    selTex:SetAllPoints()
+    selTex:SetTexture("Interface\\Buttons\\WHITE8x8")
+    selTex:SetVertexColor(0.3, 0.6, 1.0, 0.5)
+    selTex:Hide()
+    btn.selTex = selTex
+    btn.appData = appData
+    btn.appLabel = label
+
+    -- Wiggle animation state (randomize per button so they don't all sync)
+    btn.wiggleOffset = math.random() * 6.28
+    btn.wiggleAnchor = nil  -- set when entering edit mode
+
+    btn:SetScript("OnEnter", function(self)
+        if not home.editMode then
+            self:SetBackdropColor(0.28, 0.28, 0.35, 0.9)
+            self:SetBackdropBorderColor(0.4, 0.4, 0.5, 0.8)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(appData.label)
+            GameTooltip:Show()
+        end
+    end)
+    btn:SetScript("OnLeave", function(self)
+        if not home.editMode then
+            self:SetBackdropColor(0.18, 0.18, 0.22, 0.9)
+            self:SetBackdropBorderColor(0.25, 0.25, 0.30, 0.6)
+        end
+        GameTooltip_Hide()
+    end)
+
+    -- Forward mouse wheel to home page switching
+    btn:EnableMouseWheel(true)
+    btn:SetScript("OnMouseWheel", function(_, delta)
+        if delta > 0 then
+            home:SetPage(home.currentIdx - 1)
+        else
+            home:SetPage(home.currentIdx + 1)
+        end
+    end)
+    -- Track drag on app buttons for page swiping
+    btn:SetScript("OnMouseDown", function(_, button)
+        if button == "LeftButton" then
+            home.dragStartX = GetCursorPosition()
+            home.dragSwiped = false
+        end
+    end)
+    btn:SetScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" and home.dragStartX then
+            local dx = GetCursorPosition() - home.dragStartX
+            local threshold = 30 * (phone:GetEffectiveScale() or 1)
+            if dx > threshold then
+                home:SetPage(home.currentIdx - 1)
+                home.dragSwiped = true
+            elseif dx < -threshold then
+                home:SetPage(home.currentIdx + 1)
+                home.dragSwiped = true
+            end
+            home.dragStartX = nil
+        end
+    end)
     btn:SetScript("OnClick", function()
+        if home.dragSwiped then home.dragSwiped = false; return end
+        if home.editMode then
+            home:OnEditClick(appData.page)
+            return
+        end
         if appData.page then
             ShowPage(appData.page)
             return
@@ -1222,17 +1120,301 @@ local function CreateAppButton(parent, appData, index)
             print("|cffff4444[Phone]|r Can't open panels in combat.")
             return
         end
-        appData.action()
+        if appData.action then appData.action() end
     end)
-
-    btn:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(appData.label)
-        GameTooltip:Show()
-    end)
-    btn:SetScript("OnLeave", GameTooltip_Hide)
 
     return btn
+end
+
+-- Position a button in the grid
+local function PositionAppButton(btn, pageFrame, slotIdx, pageIdx)
+    local row = floor((slotIdx - 1) / COLS)
+    local col = (slotIdx - 1) % COLS
+    local parentWidth = PHONE_WIDTH - BEZEL_INSET_LEFT - BEZEL_INSET_RIGHT - 4
+    local totalIconWidth = COLS * ICON_SIZE + (COLS - 1) * ICON_PADDING
+    local offsetX = (parentWidth - totalIconWidth) / 2
+    local yOff = home:AppYOffset(pageIdx)
+    local xPos = offsetX + col * (ICON_SIZE + ICON_PADDING)
+    local yPos = -(yOff + row * home.ROW_HEIGHT)
+    btn:ClearAllPoints()
+    btn:SetParent(pageFrame)
+    btn:SetPoint("TOPLEFT", xPos, yPos)
+    btn:Show()
+end
+
+-- Switch home page
+function home:SetPage(idx)
+    idx = max(1, min(idx, self.totalPages))
+    self.currentIdx = idx
+    for i, frame in ipairs(self.frames) do
+        frame:SetShown(i == idx)
+    end
+    -- Re-parent widget to the page that has it
+    widget:SetParent(self.frames[self.widgetPage] or self.frames[1])
+    widget:SetShown(idx == self.widgetPage)
+    self:UpdateDots()
+end
+
+-- Update dot indicators
+function home:UpdateDots()
+    for i, dot in ipairs(self.dots) do
+        if i == self.currentIdx then
+            dot:SetVertexColor(1, 1, 1, 0.9)
+        else
+            dot:SetVertexColor(0.4, 0.4, 0.45, 0.6)
+        end
+    end
+end
+
+-- Build/rebuild the entire home grid from layout
+function home:RefreshGrid()
+    local layout = HearthPhoneDB.appLayout
+    if not layout or #layout == 0 then
+        layout = BuildDefaultLayout()
+        HearthPhoneDB.appLayout = layout
+    end
+
+    -- Determine total pages (in edit mode, add one extra if last page has apps)
+    local numPages = #layout
+    if self.editMode then
+        local lastPage = layout[numPages]
+        if lastPage and #lastPage > 0 then
+            numPages = numPages + 1
+            layout[numPages] = layout[numPages] or {}
+        end
+    end
+    self.totalPages = max(1, numPages)
+
+    -- Create page frames as needed
+    for i = 1, self.totalPages do
+        if not self.frames[i] then
+            local f = CreateFrame("Frame", nil, homePage)
+            f:SetAllPoints()
+            f:Hide()
+            -- Empty slot click handler for edit mode
+            f:EnableMouse(false)
+            self.frames[i] = f
+        end
+    end
+    -- Hide excess page frames
+    for i = self.totalPages + 1, #self.frames do
+        self.frames[i]:Hide()
+    end
+
+    -- Hide all existing buttons
+    for _, btn in pairs(self.buttons) do
+        btn:Hide()
+    end
+
+    -- Place buttons according to layout
+    for pageIdx = 1, self.totalPages do
+        local pageSlots = layout[pageIdx] or {}
+        local maxSlots = self:SlotsForPage(pageIdx)
+        for slotIdx = 1, maxSlots do
+            local appKey = pageSlots[slotIdx]
+            if appKey then
+                local appData = self.appByPage[appKey]
+                if appData then
+                    local btn = self.buttons[appKey]
+                    if not btn then
+                        btn = CreateAppButton(self.frames[pageIdx], appData)
+                        self.buttons[appKey] = btn
+                    end
+                    PositionAppButton(btn, self.frames[pageIdx], slotIdx, pageIdx)
+                    btn.selTex:SetShown(self.editMode and self.selectedSlot and self.selectedSlot.appKey == appKey)
+                end
+            end
+        end
+    end
+
+    -- Create/update dots
+    if not self.dotFrame then
+        self.dotFrame = CreateFrame("Frame", nil, homePage)
+        self.dotFrame:SetHeight(self.DOT_SIZE + 4)
+        self.dotFrame:SetPoint("BOTTOMLEFT", 0, 2)
+        self.dotFrame:SetPoint("BOTTOMRIGHT", 0, 2)
+    end
+    -- Clear old dots
+    for _, dot in ipairs(self.dots) do
+        dot:Hide()
+    end
+    self.dots = {}
+    local totalDotsWidth = self.totalPages * self.DOT_SIZE + (self.totalPages - 1) * self.DOT_GAP
+    local dotStartX = (self.dotFrame:GetWidth() or 170) / 2 - totalDotsWidth / 2
+    for i = 1, self.totalPages do
+        local dot = self.dotFrame:CreateTexture(nil, "ARTWORK")
+        dot:SetSize(self.DOT_SIZE, self.DOT_SIZE)
+        dot:SetPoint("LEFT", self.dotFrame, "LEFT", dotStartX + (i - 1) * (self.DOT_SIZE + self.DOT_GAP), 0)
+        dot:SetTexture("Interface\\Buttons\\WHITE8x8")
+        self.dots[i] = dot
+    end
+
+    self:SetPage(min(self.currentIdx, self.totalPages))
+end
+
+-- Edit mode: click on an app to select, click another to swap
+function home:OnEditClick(appKey)
+    if not self.selectedSlot then
+        -- Select this app
+        self.selectedSlot = { appKey = appKey }
+        if self.buttons[appKey] then
+            self.buttons[appKey].selTex:Show()
+        end
+        return
+    end
+
+    -- Clicking same app again = deselect
+    if self.selectedSlot.appKey == appKey then
+        if self.buttons[appKey] then
+            self.buttons[appKey].selTex:Hide()
+        end
+        self.selectedSlot = nil
+        return
+    end
+
+    -- Swap the two apps in layout
+    local layout = HearthPhoneDB.appLayout
+    local fromPage, fromSlot, toPage, toSlot
+    for pi, pageSlots in ipairs(layout) do
+        for si, key in pairs(pageSlots) do
+            if key == self.selectedSlot.appKey then fromPage, fromSlot = pi, si end
+            if key == appKey then toPage, toSlot = pi, si end
+        end
+    end
+    if fromPage and toPage then
+        layout[fromPage][fromSlot], layout[toPage][toSlot] = layout[toPage][toSlot], layout[fromPage][fromSlot]
+    end
+    self.selectedSlot = nil
+    self:RefreshGrid()
+    self:ShowEmptySlots()
+    self:RecordWiggleAnchors()
+end
+
+-- Click empty slot in edit mode to move selected app there
+function home:OnEmptySlotClick(pageIdx, slotIdx)
+    if not self.selectedSlot then return end
+    local layout = HearthPhoneDB.appLayout
+    -- Find and remove the selected app from its old position
+    for pi, pageSlots in ipairs(layout) do
+        for si, key in pairs(pageSlots) do
+            if key == self.selectedSlot.appKey then
+                pageSlots[si] = nil
+            end
+        end
+    end
+    -- Place it in the new slot
+    layout[pageIdx] = layout[pageIdx] or {}
+    layout[pageIdx][slotIdx] = self.selectedSlot.appKey
+    self.selectedSlot = nil
+    self:RefreshGrid()
+    self:ShowEmptySlots()
+    self:RecordWiggleAnchors()
+end
+
+-- Create/show empty slot buttons for edit mode
+function home:ShowEmptySlots()
+    if not self.editMode then return end
+    local layout = HearthPhoneDB.appLayout
+    for pageIdx = 1, self.totalPages do
+        local pageSlots = layout[pageIdx] or {}
+        local maxSlots = self:SlotsForPage(pageIdx)
+        for slotIdx = 1, maxSlots do
+            if not pageSlots[slotIdx] then
+                local slotKey = pageIdx .. ":" .. slotIdx
+                if not self.buttons[slotKey] then
+                    local f = CreateFrame("Button", nil, self.frames[pageIdx])
+                    f:SetSize(ICON_SIZE, ICON_SIZE)
+                    local bg = f:CreateTexture(nil, "BACKGROUND")
+                    bg:SetAllPoints()
+                    bg:SetTexture("Interface\\Buttons\\WHITE8x8")
+                    bg:SetVertexColor(0.2, 0.2, 0.25, 0.4)
+                    local hl = f:CreateTexture(nil, "HIGHLIGHT")
+                    hl:SetAllPoints()
+                    hl:SetTexture("Interface\\Buttons\\WHITE8x8")
+                    hl:SetVertexColor(1, 1, 1, 0.15)
+                    self.buttons[slotKey] = f
+                    f.isEmptySlot = true
+                end
+                local f = self.buttons[slotKey]
+                f.emptyPageIdx = pageIdx
+                f.emptySlotIdx = slotIdx
+                f:SetScript("OnClick", function()
+                    self:OnEmptySlotClick(pageIdx, slotIdx)
+                end)
+                PositionAppButton(f, self.frames[pageIdx], slotIdx, pageIdx)
+            end
+        end
+    end
+end
+
+-- Re-record wiggle anchors and show edit glows (call after RefreshGrid in edit mode)
+function home:RecordWiggleAnchors()
+    for key, btn in pairs(self.buttons) do
+        if not btn.isEmptySlot and btn.editGlow then
+            btn.editGlow:Show()
+            local point, rel, relPoint, x, y = btn:GetPoint(1)
+            btn.wiggleAnchor = { point = point, rel = rel, relPoint = relPoint, x = x, y = y }
+        end
+    end
+end
+
+function home:EnterEditMode()
+    self.editMode = true
+    self.selectedSlot = nil
+    self:RefreshGrid()
+    self:ShowEmptySlots()
+    self:RecordWiggleAnchors()
+    -- Start wiggle animation
+    if not self.wiggleFrame then
+        self.wiggleFrame = CreateFrame("Frame")
+    end
+    self.wiggleTime = 0
+    self.wiggleFrame:SetScript("OnUpdate", function(_, dt)
+        self.wiggleTime = (self.wiggleTime or 0) + dt
+        local t = self.wiggleTime
+        for key, btn in pairs(self.buttons) do
+            if not btn.isEmptySlot and btn.wiggleAnchor then
+                local a = btn.wiggleAnchor
+                local phase = t * 30 + (btn.wiggleOffset or 0)
+                local dx = math.sin(phase) * 0.35
+                btn:ClearAllPoints()
+                btn:SetPoint(a.point, a.rel, a.relPoint, a.x + dx, a.y)
+            end
+        end
+    end)
+end
+
+function home:ExitEditMode()
+    self.editMode = false
+    self.selectedSlot = nil
+    -- Stop wiggle animation
+    if self.wiggleFrame then
+        self.wiggleFrame:SetScript("OnUpdate", nil)
+    end
+    -- Reset buttons: hide glows, restore positions
+    for key, btn in pairs(self.buttons) do
+        if btn.isEmptySlot then
+            btn:Hide()
+        end
+        if btn.editGlow then btn.editGlow:Hide() end
+        if btn.selTex then btn.selTex:Hide() end
+        if btn.wiggleAnchor then
+            local a = btn.wiggleAnchor
+            btn:ClearAllPoints()
+            btn:SetPoint(a.point, a.rel, a.relPoint, a.x, a.y)
+            btn.wiggleAnchor = nil
+        end
+    end
+    -- Clean up trailing empty pages from layout
+    local layout = HearthPhoneDB.appLayout
+    for i = #layout, 2, -1 do
+        local hasApp = false
+        for _, v in pairs(layout[i]) do
+            if v then hasApp = true; break end
+        end
+        if not hasApp then table.remove(layout, i) else break end
+    end
+    self:RefreshGrid()
 end
 
 -- Defer icon creation until all addons are loaded
@@ -1240,55 +1422,92 @@ local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:SetScript("OnEvent", function(self)
     self:UnregisterAllEvents()
-    local idx = 1
-    for _, app in ipairs(apps) do
-        local btn = CreateAppButton(homeContent, app, idx)
-        if btn then idx = idx + 1 end
+
+    -- Load or build layout
+    HearthPhoneDB = HearthPhoneDB or {}
+    if not HearthPhoneDB.appLayout then
+        HearthPhoneDB.appLayout = BuildDefaultLayout()
     end
-    -- Set scroll content height based on number of rows
-    local totalApps = idx - 1
-    local rows = ceil(totalApps / COLS)
-    local contentH = APP_Y_OFFSET + rows * (ICON_SIZE + ICON_PADDING + 14) + 10
-    homeContent:SetHeight(contentH)
-    homeScroll.contentHeight = contentH
-    -- Initialize built-in apps (pcall to prevent one failure from blocking the rest)
-    local inits = {
-        { PhoneSnakeGame, snakePage },
-        { PhoneTetrisGame, tetrisPage },
-        { PhoneTicTacToeGame, tictactoePage },
-        { WowSoFitApp, fitnessPage },
-        { PhoneMusicApp, musicPage },
-        { PhoneUberApp, uberPage },
-        { PhoneCandyCrushGame, candyPage },
-        { PhoneNotesApp, notesPage },
-        { Phone2048Game, page2048 },
-        { PhoneMinesweeperGame, minesPage },
-        { PhoneFlappyBirdGame, flappyPage },
-        { PhoneWordleGame, wordlePage },
-        { PhoneWeatherApp, weatherPage },
-        { PhoneCalculatorApp, calcPage },
-        { PhoneAngryBirdsGame, angrybirdsPage },
-        { PhoneCallApp, phonePage },
-        { PhoneSpaceShooterGame, shooterPage },
-        { PhoneTempleRunGame, templerunPage },
-        { PhoneSubwaySurfersGame, subwayPage },
-        { PhoneBattleshipGame, battleshipPage },
-        { PhoneToysApp, toysPage },
-        { PhoneSocialApp, socialPage },
-        { PhoneAgarioGame, agarioPage },
-        { PhoneTimerApp, timerPage },
-        { PhoneCalendarApp, calendarPage },
-        { PhoneDamageMeterApp, dpsMeterPage },
-        { PhoneCameraApp, cameraPage },
-        { PhoneGalleryApp, galleryPage },
-        { PhoneSettingsApp, settingsPage },
-    }
-    for _, pair in ipairs(inits) do
-        local ok, err = pcall(pair[1].Init, pair[1], pair[2])
-        if not ok then
-            print("|cffff4444[HearthPhone]|r Init error: " .. tostring(err))
+
+    -- Validate layout: ensure all apps exist in layout, add missing ones
+    local placed = {}
+    for _, pageSlots in ipairs(HearthPhoneDB.appLayout) do
+        for _, key in pairs(pageSlots) do
+            if key then placed[key] = true end
         end
     end
+    for _, app in ipairs(apps) do
+        if app.page and not placed[app.page] then
+            -- Find first available slot
+            local added = false
+            for pi, pageSlots in ipairs(HearthPhoneDB.appLayout) do
+                local maxSlots = home:SlotsForPage(pi)
+                for si = 1, maxSlots do
+                    if not pageSlots[si] then
+                        pageSlots[si] = app.page
+                        added = true
+                        break
+                    end
+                end
+                if added then break end
+            end
+            if not added then
+                local newPage = #HearthPhoneDB.appLayout + 1
+                HearthPhoneDB.appLayout[newPage] = { app.page }
+            end
+        end
+    end
+
+    -- Build the grid
+    home:RefreshGrid()
+
+    -- Set up mouse wheel page switching on homePage
+    homePage:EnableMouseWheel(true)
+    homePage:SetScript("OnMouseWheel", function(_, delta)
+        if delta > 0 then
+            home:SetPage(home.currentIdx - 1)
+        else
+            home:SetPage(home.currentIdx + 1)
+        end
+    end)
+
+    -- Horizontal drag to switch pages
+    homePage:EnableMouse(true)
+    homePage:SetScript("OnMouseDown", function(_, button)
+        if button == "LeftButton" then
+            local x = GetCursorPosition()
+            home.dragStartX = x
+        end
+    end)
+    homePage:SetScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" and home.dragStartX then
+            local x = GetCursorPosition()
+            local dx = x - home.dragStartX
+            local threshold = 30 * (phone:GetEffectiveScale() or 1)
+            if dx > threshold then
+                home:SetPage(home.currentIdx - 1)
+            elseif dx < -threshold then
+                home:SetPage(home.currentIdx + 1)
+            end
+            home.dragStartX = nil
+        end
+    end)
+
+    -- Initialize built-in apps
+    for name, app in pairs(pg.appMap) do
+        if app and app.Init and pg[name] then
+            local ok, err = pcall(app.Init, app, pg[name])
+            if not ok then
+                print("|cffff4444[HearthPhone]|r Init error (" .. name .. "): " .. tostring(err))
+            end
+        end
+    end
+    -- gchat has no entry in appMap, init separately if needed
+    -- (gchat UI is built inline below, not via an app object)
+
+    -- Expose ShowPage and home for settings app
+    PhoneSettingsApp._showPage = ShowPage
+    PhoneSettingsApp._home = home
 
     -- Give PhoneCallApp a way to force-show the phone on the call page
     PhoneCallApp.ForceShowCall = function()
@@ -1297,15 +1516,13 @@ initFrame:SetScript("OnEvent", function(self)
     end
 
     -- Give games a way to force-show their page (for incoming challenges)
-    -- If locked, show notification instead of navigating directly
-    local function GameForceShow(page, from, gameName)
+    local function GameForceShow(gamePage, from, gameName)
         phone:Show()
         if not phoneLocked then
-            ShowPage(page)
+            ShowPage(gamePage)
         else
-            -- Show a notification; clicking it will route to the game page
-            local label = gameName or page
-            ShowNotification("Game Challenge", (from or "Someone") .. " wants to play " .. label, "game:" .. page)
+            local lbl = gameName or gamePage
+            ShowNotification("Game Challenge", (from or "Someone") .. " wants to play " .. lbl, "game:" .. gamePage)
         end
     end
 
@@ -1350,9 +1567,9 @@ local function GetClassColorHex(classFile)
 end
 
 ---------------------------------------------------------------------------
--- Conversation list view (inside gchatPage)
+-- Conversation list view (inside pg.gchat)
 ---------------------------------------------------------------------------
-local convoListView = CreateFrame("Frame", nil, gchatPage)
+local convoListView = CreateFrame("Frame", nil, pg.gchat)
 convoListView:SetAllPoints()
 
 local msgTitle = convoListView:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
@@ -1399,7 +1616,7 @@ local RefreshConvoList  -- forward declaration
 -- Chat view (individual conversation)
 ---------------------------------------------------------------------------
 local newChatView  -- forward declaration
-local chatView = CreateFrame("Frame", nil, gchatPage)
+local chatView = CreateFrame("Frame", nil, pg.gchat)
 chatView:SetAllPoints()
 chatView:Hide()
 
@@ -1521,7 +1738,7 @@ backBtn:SetScript("OnClick", CloseConvo)
 ---------------------------------------------------------------------------
 -- New Chat view (friend picker + manual name input)
 ---------------------------------------------------------------------------
-newChatView = CreateFrame("Frame", nil, gchatPage)
+newChatView = CreateFrame("Frame", nil, pg.gchat)
 newChatView:SetAllPoints()
 newChatView:Hide()
 
