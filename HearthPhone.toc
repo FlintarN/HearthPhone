@@ -1,0 +1,38 @@
+## Interface: 120001
+## Title: HearthPhone
+## Notes: A phone-style UI panel for quick access to Blizzard panels
+## Author: Andreas
+## Version: 0.1
+## SavedVariables: HearthPhoneDB WowSoFitDB
+
+PhoneFriends.lua
+PhoneGameChallenge.lua
+PhoneSnake.lua
+PhoneTetris.lua
+PhoneTicTacToe.lua
+PhoneBattleship.lua
+PhoneToys.lua
+PhoneSocial.lua
+PhoneAgario.lua
+PhoneMusic.lua
+PhoneUber.lua
+PhoneCandyCrush.lua
+PhoneNotes.lua
+Phone2048.lua
+PhoneMinesweeper.lua
+PhoneFlappyBird.lua
+PhoneWordle.lua
+PhoneWeather.lua
+PhoneCalculator.lua
+PhoneAngryBirds.lua
+PhoneSpaceShooter.lua
+PhoneTempleRun.lua
+PhoneSubwaySurfers.lua
+PhoneTimer.lua
+PhoneCalendar.lua
+PhoneDamageMeter.lua
+PhoneCamera.lua
+PhoneWallpaper.lua
+PhoneCall.lua
+WowSoFit.lua
+HearthPhone.lua
