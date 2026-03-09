@@ -68,7 +68,7 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 Place `.mp3` files in the `HearthPhone/Music/` folder. They will appear in the Music app under "My Music". Requires a client restart to detect new files.
 
 ### Images
-Place `.png`, `.tga`, or `.blp` image files in the `HearthPhone/Wallpapers/` folder. They will appear in the Gallery app for use as lock screen or home screen backgrounds. Requires a client restart to detect new files.
+Place `.png`, `.tga`, or `.blp` image files in the `HearthPhone/Gallery/` folder. They will appear in the Gallery app for use as lock screen or home screen backgrounds. Requires a client restart to detect new files.
 
 ## For Addon Developers
 

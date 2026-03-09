@@ -3,3 +3,7 @@
 __pycache__/
 .DS_Store
 Thumbs.db
+
+# User content - music and images are personal, not shipped with the addon
+Music/*
+Gallery/*

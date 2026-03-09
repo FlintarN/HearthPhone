@@ -4,7 +4,7 @@ PhoneGalleryApp = {}
 
 local parent
 local ADDON_NAME = "HearthPhone"
-local WALLPAPER_PATH = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Wallpapers\\"
+local GALLERY_PATH = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Gallery\\"
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 
 -- Forward declarations
@@ -97,7 +97,7 @@ function PhoneGalleryApp:Init(parentFrame)
     instructions:SetPoint("RIGHT", -4, 0)
     instructions:SetJustifyH("LEFT")
     instructions:SetWordWrap(true)
-    instructions:SetText("|cff888888Drop PNG/TGA/BLP files into:\nHearthPhone\\Wallpapers\\\n\nThen type the filename below.\nImages should be power-of-2\n(e.g. 256x512).|r")
+    instructions:SetText("|cff888888Drop PNG/TGA/BLP files into:\nHearthPhone\\Gallery\\\n\nThen type the filename below.\nImages should be power-of-2\n(e.g. 256x512).|r")
     local inf = instructions:GetFont()
     if inf then instructions:SetFont(inf, 8, "") end
 
@@ -193,7 +193,7 @@ function PhoneGalleryApp:Init(parentFrame)
 
         local foundFile
         for _, filename in ipairs(tryFiles) do
-            local path = WALLPAPER_PATH .. filename
+            local path = GALLERY_PATH .. filename
             -- Try creating a texture to see if the file exists
             local testTex = parent:CreateTexture(nil, "BACKGROUND")
             testTex:SetSize(1, 1)
@@ -455,7 +455,7 @@ function PhoneGalleryApp:Init(parentFrame)
             table.insert(images, {
                 name = saved.name,
                 file = saved.file,
-                path = WALLPAPER_PATH .. saved.file,
+                path = GALLERY_PATH .. saved.file,
                 crop = nil, -- user wallpapers are assumed portrait-ready
             })
         end

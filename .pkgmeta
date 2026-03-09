@@ -1,0 +1,10 @@
+package-as: HearthPhone
+
+ignore:
+  - .git
+  - .gitignore
+  - .pkgmeta
+  - .claude
+  - README.md
+  - LICENSE
+  - "*.py"
