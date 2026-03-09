@@ -195,14 +195,14 @@ end)
 ---------------------------------------------------------------------------
 -- Screen background
 ---------------------------------------------------------------------------
--- Solid black fallback behind the wallpaper
+-- Solid black fallback behind the gallery image
 local screenBgFallback = phone:CreateTexture(nil, "BACKGROUND", nil, 0)
 screenBgFallback:SetPoint("TOPLEFT", BEZEL_INSET_LEFT, -BEZEL_INSET_TOP)
 screenBgFallback:SetPoint("BOTTOMRIGHT", -BEZEL_INSET_RIGHT, BEZEL_INSET_BOTTOM - 4)
 screenBgFallback:SetTexture("Interface\\Buttons\\WHITE8x8")
 screenBgFallback:SetVertexColor(0.08, 0.08, 0.10, 1)
 
--- Home screen wallpaper
+-- Home screen gallery image
 local screenBg = phone:CreateTexture(nil, "BACKGROUND", nil, 1)
 screenBg:SetPoint("TOPLEFT", BEZEL_INSET_LEFT, -BEZEL_INSET_TOP)
 screenBg:SetPoint("BOTTOMRIGHT", -BEZEL_INSET_RIGHT, BEZEL_INSET_BOTTOM - 4)
@@ -233,7 +233,7 @@ statusBar:SetPoint("TOPRIGHT", 6, 2)
 statusBar:SetHeight(STATUS_BAR_HEIGHT + 2)
 statusBar:SetFrameLevel(screen:GetFrameLevel() + 5)
 
--- Background on phone so it renders BELOW the bezel overlay but above the wallpaper
+-- Background on phone so it renders BELOW the bezel overlay but above the gallery image
 local statusBarBg = phone:CreateTexture(nil, "ARTWORK", nil, 1)
 statusBarBg:SetPoint("TOPLEFT", statusBar, "TOPLEFT")
 statusBarBg:SetPoint("BOTTOMRIGHT", statusBar, "BOTTOMRIGHT")
@@ -569,13 +569,13 @@ lockScreen:SetFrameLevel(screen:GetFrameLevel() + 20)
 lockScreen:EnableMouse(true) -- block clicks through to apps
 lockScreen:SetScript("OnMouseDown", function() ToggleLock() end)
 
--- Solid black fallback behind the lock wallpaper
+-- Solid black fallback behind the lock gallery image
 local lockBgFallback = lockScreen:CreateTexture(nil, "BACKGROUND", nil, 0)
 lockBgFallback:SetAllPoints()
 lockBgFallback:SetTexture("Interface\\Buttons\\WHITE8x8")
 lockBgFallback:SetVertexColor(0.05, 0.05, 0.08, 1)
 
--- Lock screen wallpaper
+-- Lock screen gallery image
 local lockBg = lockScreen:CreateTexture(nil, "BACKGROUND", nil, 1)
 lockBg:SetAllPoints()
 lockBg:SetVertexColor(0.5, 0.5, 0.5, 1)
@@ -628,13 +628,13 @@ ToggleLock = function()
     end
 end
 
--- Home button bar background (above screen content so it doesn't blend with wallpaper)
+-- Home button bar background (above screen content so it doesn't blend with gallery image)
 homeBtnBar = CreateFrame("Frame", nil, screen)
 homeBtnBar:SetFrameLevel(screen:GetFrameLevel() + 14)
 homeBtnBar:SetPoint("BOTTOMLEFT", -4, -4)
 homeBtnBar:SetPoint("BOTTOMRIGHT", 4, -4)
 homeBtnBar:SetHeight(36)
--- Background on phone so it renders BELOW the bezel overlay but above the wallpaper
+-- Background on phone so it renders BELOW the bezel overlay but above the gallery image
 local homeBtnBarBg = phone:CreateTexture(nil, "ARTWORK", nil, 1)
 homeBtnBarBg:SetPoint("TOPLEFT", homeBtnBar, "TOPLEFT")
 homeBtnBarBg:SetPoint("BOTTOMRIGHT", homeBtnBar, "BOTTOMRIGHT")
@@ -836,7 +836,7 @@ widget:SetPoint("TOPLEFT", 4, -2)
 widget:SetPoint("TOPRIGHT", -4, -2)
 widget:SetHeight(WIDGET_HEIGHT)
 
--- No background — text floats over wallpaper with shadows for readability
+-- No background — text floats over gallery image with shadows for readability
 
 -- Time display
 local widgetTime = widget:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -1957,8 +1957,8 @@ phone:SetScript("OnEvent", function(self, event)
             self:ClearAllPoints()
             self:SetPoint(HearthPhoneDB.point, UIParent, HearthPhoneDB.relPoint, HearthPhoneDB.x, HearthPhoneDB.y)
         end
-        -- Apply saved wallpapers
-        PhoneGalleryApp:ApplyWallpapers()
+        -- Apply saved gallery images
+        PhoneGalleryApp:ApplyGallery images()
     end
     UpdateStatusBar()
 end)

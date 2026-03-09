@@ -51,7 +51,7 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 - **Fitness Tracker** — Tracks steps, distance, and activity
 - **Music Player** — Play custom MP3 files
 - **Uber** — Flight map using hearthstones
-- **Wallpapers** — Customize your lock screen and home screen backgrounds
+- **Gallery** — Browse, add, and set custom images as lock screen or home screen backgrounds
 
 ## Features
 
@@ -60,15 +60,15 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 - Status bar with clock, gold, and zone info
 - Notification banners with click-to-open routing
 - Multiplayer games and social features sync via hidden addon channels
-- Persistent data saved across sessions (highscores, notes, posts, wallpapers)
+- Persistent data saved across sessions (highscores, notes, posts, gallery images)
 
 ## Custom Content
 
 ### Music
 Place `.mp3` files in the `HearthPhone/Music/` folder. They will appear in the Music app under "My Music". Requires a client restart to detect new files.
 
-### Wallpapers
-Place `.png`, `.tga`, or `.blp` image files in the `HearthPhone/Wallpapers/` folder. They will appear in the Wallpaper app for use as lock screen or home screen backgrounds. Requires a client restart to detect new files.
+### Images
+Place `.png`, `.tga`, or `.blp` image files in the `HearthPhone/Wallpapers/` folder. They will appear in the Gallery app for use as lock screen or home screen backgrounds. Requires a client restart to detect new files.
 
 ## For Addon Developers
 
@@ -78,4 +78,4 @@ HearthPhone uses hidden addon message channels for multiplayer features:
 
 ## License
 
-Feel free to use, modify, and share.
+This project is licensed under the [MIT License](LICENSE).

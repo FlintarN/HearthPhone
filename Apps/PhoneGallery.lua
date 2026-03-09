@@ -1,4 +1,4 @@
--- PhoneWallpaper - Gallery & Wallpaper picker for HearthPhone
+-- PhoneGallery - Gallery & image picker for HearthPhone
 
 PhoneGalleryApp = {}
 

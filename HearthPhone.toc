@@ -32,7 +32,7 @@ Apps\PhoneTimer.lua
 Apps\PhoneCalendar.lua
 Apps\PhoneDamageMeter.lua
 Apps\PhoneCamera.lua
-Apps\PhoneWallpaper.lua
+Apps\PhoneGallery.lua
 Apps\PhoneCall.lua
 Apps\WowSoFit.lua
 HearthPhone.lua
