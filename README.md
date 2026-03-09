@@ -20,8 +20,8 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 ## Apps
 
 ### Communication
-- **Messages** — Guild, Party, Raid, Instance chat and DM whispers in one place
-- **Phone** — Call your friends with a simulated voice call UI
+- **Messages** — Guild, Party, Raid, Instance chat and DM whispers in one unified inbox
+- **Phone** — Simulated call UI. Ring a friend and they get a popup on their phone. It's a gimmick — no actual voice chat, just a fun roleplay feature.
 - **Social Network** — Twitter/Reddit-style feed with posts, comments, emoji reactions, @mention tagging, and profile pages. Syncs with other HearthPhone users via addon channels.
 
 ### Games
@@ -49,7 +49,7 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 - **Camera** — Screenshot tool
 - **DPS Meter** — Combat damage tracker
 - **Fitness Tracker** — Tracks steps, distance, and activity
-- **Music Player** — Play custom MP3 files from the Music folder
+- **Music Player** — Play custom MP3 files
 - **Uber** — Flight map using hearthstones
 - **Wallpapers** — Customize your lock screen and home screen backgrounds
 
@@ -62,9 +62,13 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 - Multiplayer games and social features sync via hidden addon channels
 - Persistent data saved across sessions (highscores, notes, posts, wallpapers)
 
-## Adding Custom Music
+## Custom Content
 
-Place `.mp3` files in the `HearthPhone/Music/` folder. They will appear in the Music app under "My Music".
+### Music
+Place `.mp3` files in the `HearthPhone/Music/` folder. They will appear in the Music app under "My Music". Requires a client restart to detect new files.
+
+### Wallpapers
+Place `.png`, `.tga`, or `.blp` image files in the `HearthPhone/Wallpapers/` folder. They will appear in the Wallpaper app for use as lock screen or home screen backgrounds. Requires a client restart to detect new files.
 
 ## For Addon Developers
 
