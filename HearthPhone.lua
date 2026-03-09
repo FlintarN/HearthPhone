@@ -1958,7 +1958,7 @@ phone:SetScript("OnEvent", function(self, event)
             self:SetPoint(HearthPhoneDB.point, UIParent, HearthPhoneDB.relPoint, HearthPhoneDB.x, HearthPhoneDB.y)
         end
         -- Apply saved gallery images
-        PhoneGalleryApp:ApplyGallery images()
+        PhoneGalleryApp:ApplyWallpapers()
     end
     UpdateStatusBar()
 end)
