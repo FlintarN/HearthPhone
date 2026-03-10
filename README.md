@@ -16,6 +16,7 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 | Command | Description |
 |---------|-------------|
 | `/phone` | Toggle the phone on/off |
+| `/phonereset` | Reset phone scale to default |
 
 ## Apps
 
@@ -40,6 +41,7 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 - **Subway Surfers** — Lane-dodge runner
 - **Agar.io** — Multiplayer blob eating game (shared channel, anyone with the addon can join)
 - **Survivor** — Top-down roguelike shooter with WASD movement, mouse aiming, wave-based spawning, 3 monster types, and loot power-ups
+- **Tower Defense** — Grid-based TD with 3 tower types (Arrow, Cannon, Ice), upgrades, AoE splash, and cubic HP scaling
 
 ### Tools
 - **Calculator** — Basic math calculator

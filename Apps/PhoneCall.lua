@@ -44,7 +44,18 @@ end
 local function SendCallMessage(target, msgType, data)
     local payload = msgType
     if data then payload = msgType .. ":" .. data end
-    C_ChatInfo.SendAddonMessage(ADDON_PREFIX, payload, "WHISPER", target)
+    -- Prefer BNet transport via PhonePresence (cross-realm, cross-faction)
+    if PhonePresence then
+        local friend = PhonePresence:FindFriend(target)
+        if friend then
+            local sent = PhonePresence:SendToFriend(friend, ADDON_PREFIX, payload)
+            if sent then return end
+        end
+    end
+    -- Fallback: direct whisper (same realm/faction only)
+    pcall(function()
+        C_ChatInfo.SendAddonMessage(ADDON_PREFIX, payload, "WHISPER", target)
+    end)
 end
 
 local function PlayRingtone()
@@ -168,36 +179,18 @@ local function DeclineCall()
 end
 
 -- ============================================================
--- Addon presence detection
+-- Addon presence (delegates to shared PhonePresence module)
 -- ============================================================
-local knownAddonUsers = {} -- [name] = true/false
-local pingCooldown = 0
-local newUserCallbacks = {}  -- callbacks fired when a new addon user is discovered
-
-function PhoneCallApp:OnNewAddonUser(callback)
-    table.insert(newUserCallbacks, callback)
-end
-
 local function PingOnlineFriends()
-    local now = GetTime()
-    if now - pingCooldown < 10 then return end -- don't spam
-    pingCooldown = now
-
-    local friends = PhoneFriends and PhoneFriends:GetList() or {}
-    for _, f in ipairs(friends) do
-        if f.isOnline then
-            local target = PhoneFriends:WhisperTarget(f)
-            if target and target ~= "?" then
-                pcall(function()
-                    C_ChatInfo.SendAddonMessage(ADDON_PREFIX, "PING", "WHISPER", target)
-                end)
-            end
-        end
-    end
+    if PhonePresence then PhonePresence:PingFriends() end
 end
 
 function PhoneCallApp:HasAddon(name)
-    return knownAddonUsers[name] == true
+    return PhonePresence and PhonePresence:HasAddon(name) or false
+end
+
+function PhoneCallApp:OnNewAddonUser(callback)
+    if PhonePresence then PhonePresence:OnUserDiscovered(callback) end
 end
 
 -- ============================================================
@@ -209,24 +202,7 @@ local function OnAddonMessage(prefix, message, channel, sender)
 
     local msgType = strsplit(":", message, 2)
 
-    if msgType == "PING" then
-        -- Respond so they know we have the addon
-        pcall(function()
-            C_ChatInfo.SendAddonMessage(ADDON_PREFIX, "PONG", "WHISPER", sender)
-        end)
-        return
-    elseif msgType == "PONG" then
-        local shortName = Ambiguate(sender, "short")
-        local isNew = not knownAddonUsers[sender]
-        knownAddonUsers[shortName] = true
-        knownAddonUsers[sender] = true
-        if isNew then
-            for _, cb in ipairs(newUserCallbacks) do
-                pcall(cb, sender)
-            end
-        end
-        return
-    elseif msgType == "RING" then
+    if msgType == "RING" then
         if callState ~= "idle" then
             SendCallMessage(sender, "BUSY")
             return
@@ -325,9 +301,25 @@ function PhoneCallApp:Init(parentFrame)
     -- Event handling
     local eventFrame = CreateFrame("Frame")
     eventFrame:RegisterEvent("CHAT_MSG_ADDON")
+    eventFrame:RegisterEvent("BN_CHAT_MSG_ADDON")
     eventFrame:SetScript("OnEvent", function(_, event, ...)
         if event == "CHAT_MSG_ADDON" then
             OnAddonMessage(...)
+        elseif event == "BN_CHAT_MSG_ADDON" then
+            local prefix, message, _, senderID = ...
+            if prefix ~= ADDON_PREFIX then return end
+            local acctInfo = C_BattleNet.GetGameAccountInfoByID(senderID)
+            if acctInfo and acctInfo.characterName then
+                local sender = acctInfo.characterName
+                if acctInfo.realmName and acctInfo.realmName ~= "" then
+                    local myRealm = GetNormalizedRealmName() or ""
+                    local theirRealm = acctInfo.realmName:gsub("%s+", "")
+                    if theirRealm ~= myRealm then
+                        sender = sender .. "-" .. theirRealm
+                    end
+                end
+                OnAddonMessage(prefix, message, "BN", sender)
+            end
         end
     end)
 

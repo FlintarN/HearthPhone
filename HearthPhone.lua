@@ -1500,6 +1500,9 @@ initFrame:SetScript("OnEvent", function(self)
         end
     end)
 
+    -- Initialize shared presence/heartbeat system
+    if PhonePresence then PhonePresence:Init() end
+
     -- Initialize built-in apps
     for name, app in pairs(pg.appMap) do
         if app and app.Init and pg[name] then
