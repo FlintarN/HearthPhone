@@ -15,6 +15,9 @@ local MAX_ENEMY_BULLETS = 15
 local MAX_LOOT = 8
 local MAX_EXPLOSIONS = 10
 
+-- Forward declarations
+local Render
+
 -- State
 local gameFrame, hudFrame, scoreText, waveText, hpText, msgText
 local gameRunning = false
@@ -261,7 +264,6 @@ local function FireBullets()
             alive = true,
         })
     end
-    PlaySound(SOUNDKIT and SOUNDKIT.U_CHAT_SCROLL_BUTTON or 1115, "SFX")
 end
 
 local function FireEnemyBullet(m)
@@ -416,7 +418,7 @@ local function Tick(dt)
                     gameover = true
                     AddExplosion(player.x, player.y)
                     if msgText then
-                        msgText:SetText("|cffff4444GAME OVER|r\n|cffaaaaaa" .. score .. " pts|r\n|cff888888Press any key|r")
+                        msgText:SetText("|cffff4444GAME OVER|r\n|cffaaaaaa" .. score .. " pts|r\n|cff888888Click to start|r")
                     end
                     return
                 end
@@ -440,7 +442,7 @@ local function Tick(dt)
                     gameRunning = false
                     gameover = true
                     if msgText then
-                        msgText:SetText("|cffff4444GAME OVER|r\n|cffaaaaaa" .. score .. " pts|r\n|cff888888Press any key|r")
+                        msgText:SetText("|cffff4444GAME OVER|r\n|cffaaaaaa" .. score .. " pts|r\n|cff888888Click to start|r")
                     end
                     return
                 end
@@ -533,7 +535,7 @@ end
 -- ============================================================
 -- Rendering
 -- ============================================================
-function Render()
+Render = function()
     if not gameFrame then return end
 
     -- Player
@@ -764,7 +766,7 @@ function PhoneRoguelikeGame:Init(parentFrame)
         local f = waveText:GetFont()
         if f then waveText:SetFont(f, 8, "OUTLINE") end
     end
-    msgText:SetText("|cffff6644SURVIVOR|r\n|cff888888Press any key|r")
+    msgText:SetText("|cffff6644SURVIVOR|r\n|cff888888Click to start|r")
 
     -- Player sprite
     playerSprite = MakeSprite(gameFrame, PLAYER_SIZE, "SpritePlayer", 3)
@@ -812,6 +814,14 @@ function PhoneRoguelikeGame:Init(parentFrame)
     end)
     PhoneRoguelikeGame.keyFrame = keyFrame
 
+    -- Mouse click to start/restart
+    gameFrame:EnableMouse(true)
+    gameFrame:SetScript("OnMouseDown", function()
+        if not gameRunning then
+            StartGame()
+        end
+    end)
+
     -- Game loop
     gameFrame:SetScript("OnUpdate", function(_, dt)
         Tick(dt)
@@ -826,7 +836,7 @@ function PhoneRoguelikeGame:OnShow()
     end
     if not gameRunning and not gameover then
         if msgText then
-            msgText:SetText("|cffff6644SURVIVOR|r\n|cff888888Press any key|r")
+            msgText:SetText("|cffff6644SURVIVOR|r\n|cff888888Click to start|r")
         end
     end
 end

@@ -39,6 +39,7 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 - **Temple Run** — Endless runner
 - **Subway Surfers** — Lane-dodge runner
 - **Agar.io** — Multiplayer blob eating game (shared channel, anyone with the addon can join)
+- **Survivor** — Top-down roguelike shooter with WASD movement, mouse aiming, wave-based spawning, 3 monster types, and loot power-ups
 
 ### Tools
 - **Calculator** — Basic math calculator
@@ -56,11 +57,14 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 ## Features
 
 - Draggable phone frame with realistic bezel
-- Lock screen with swipe to unlock
+- Lock screen with PIN code and swipe to unlock
+- Multi-page home screen with swipe/scroll navigation and page indicator dots
+- App reordering — enter edit mode to rearrange apps with iOS-style wiggle animation
 - Status bar with clock, gold, and zone info
 - Notification banners with click-to-open routing
+- Settings app with display, sound, security, and wallpaper options
 - Multiplayer games and social features sync via hidden addon channels
-- Persistent data saved across sessions (highscores, notes, posts, gallery images)
+- Persistent data saved across sessions (highscores, notes, posts, gallery images, app layout)
 
 ## Custom Content
 

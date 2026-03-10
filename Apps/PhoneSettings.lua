@@ -251,7 +251,7 @@ function PhoneSettingsApp:Init(parentFrame)
     phoneFrame:Hide()
 
     local SCALE_MIN = 0.5
-    local SCALE_MAX = 2.0
+    local SCALE_MAX = 3.0
     local SCALE_STEP = 0.1
 
     local function GetPhoneScale()

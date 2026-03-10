@@ -176,6 +176,11 @@ local apps = {
         texture = ADDON_PATH .. "IconRoguelike",
         page = "roguelike",
     },
+    {
+        label = "Tower TD",
+        texture = ADDON_PATH .. "IconTowerDefense",
+        page = "towerdefense",
+    },
 }
 
 -- Saved position
@@ -333,6 +338,7 @@ MakeAppPage("timer"); MakeAppPage("calendar"); MakeAppPage("dpsmeter")
 MakeAppPage("camera"); MakeAppPage("gallery"); MakeAppPage("battleship")
 MakeAppPage("toys"); MakeAppPage("social"); MakeAppPage("agario")
 MakeAppPage("settings"); MakeAppPage("phone"); MakeAppPage("roguelike")
+MakeAppPage("towerdefense")
 
 -- Map page names to app objects for OnShow/OnHide
 pg.appMap = {
@@ -347,6 +353,7 @@ pg.appMap = {
     calendar = PhoneCalendarApp, dpsmeter = PhoneDamageMeterApp, camera = PhoneCameraApp,
     gallery = PhoneGalleryApp, settings = PhoneSettingsApp,
     roguelike = PhoneRoguelikeGame,
+    towerdefense = PhoneTowerDefenseGame,
 }
 
 -- Multi-page home screen state
@@ -2533,4 +2540,11 @@ SlashCmdList["PHONETESTGAME"] = function()
     ShowNotification("Game Challenge", "TestPlayer wants to play Tic Tac Toe", "game:tictactoe")
 end
 
-print("|cff00ccff[Phone]|r Loaded! Type /phone to toggle. /phonetest, /phonetestmention, /phonetestgame to test notifications.")
+SLASH_PHONERESET1 = "/phonereset"
+SlashCmdList["PHONERESET"] = function()
+    if HearthPhoneDB then HearthPhoneDB.phoneScale = 1.0 end
+    if HearthPhoneFrame then HearthPhoneFrame:SetScale(1.0) end
+    print("|cff00ccff[Phone]|r Scale reset to 1.0")
+end
+
+print("|cff00ccff[Phone]|r Loaded! Type /phone to toggle. /phonereset to reset size.")
