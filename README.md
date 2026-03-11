@@ -50,8 +50,8 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 - **Notes** — Write and save notes
 - **Weather** — Shows your current zone weather
 - **Camera** — Screenshot tool
-- **DPS Meter** — Combat damage tracker
-- **Fitness Tracker** — Tracks steps, distance, and activity
+- **DPS Meter** — Full combat dashboard with personal DPS/HPS, group leaderboards (Damage, Healing, Damage Taken, Deaths), and a Death Recap tab mirroring Blizzard's built-in recap with timestamps, overkill, and absorbed damage
+- **Fitness Tracker** — Tracks steps, distance, and activity with route planning on the world map
 - **Music Player** — Play custom MP3 files
 - **Uber** — Flight map using hearthstones
 - **Gallery** — Browse, add, and set custom images as lock screen or home screen backgrounds
@@ -66,6 +66,7 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 - Notification banners with click-to-open routing
 - Settings app with display, sound, security, and wallpaper options
 - Multiplayer games and social features sync via hidden addon channels
+- Cross-realm friend calling and presence detection via BNet
 - Persistent data saved across sessions (highscores, notes, posts, gallery images, app layout)
 
 ## Custom Content

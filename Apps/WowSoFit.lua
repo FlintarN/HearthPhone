@@ -464,42 +464,6 @@ local function CmdUndo()
 end
 
 --------------------------------------------------------------------------
--- Slash command
---------------------------------------------------------------------------
-SLASH_WOWSOFIT1 = "/wsf"
-SLASH_WOWSOFIT2 = "/wowsofit"
-SlashCmdList["WOWSOFIT"] = function(msg)
-    local cmd = msg:lower():trim()
-    if cmd == "start" then
-        CmdStart()
-    elseif cmd == "stop" then
-        CmdStop()
-    elseif cmd == "clear" then
-        CmdClear()
-    elseif cmd == "route" then
-        CmdRoute()
-    elseif cmd == "undo" then
-        CmdUndo()
-    elseif cmd == "plan" then
-        if WorldMapFrame and WorldMapFrame:IsShown() then
-            pinMode = not pinMode
-            print(pinMode and "|cff00ff00[WowSoFit]|r Click the map to place pins." or
-            "|cff00ff00[WowSoFit]|r Planning stopped.")
-        else
-            ToggleWorldMap()
-            C_Timer.After(0.1, function() pinMode = true end)
-        end
-    else
-        print("|cff00ff00[WowSoFit]|r Commands:")
-        print("  Open map + click |cffffd700WowSoFit|r button to place pins")
-        print("  /wsf start - Begin run (free mode if no pins)")
-        print("  /wsf stop  - End run and show stats")
-        print("  /wsf undo  - Remove last pin")
-        print("  /wsf route - Show current route")
-        print("  /wsf clear - Clear all pins")
-    end
-end
-
 --------------------------------------------------------------------------
 -- Load saved pins + setup map button when map loads
 --------------------------------------------------------------------------
@@ -741,9 +705,9 @@ function WowSoFitApp:Init(parent)
     local stopBtn  = MakeCtrlButton("Stop", btnWidth + 2, btnWidth)
     local clearBtn = MakeCtrlButton("Clear", (btnWidth + 2) * 2, btnWidth)
 
-    startBtn:SetScript("OnClick", function() SlashCmdList["WOWSOFIT"]("start") end)
-    stopBtn:SetScript("OnClick", function() SlashCmdList["WOWSOFIT"]("stop") end)
-    clearBtn:SetScript("OnClick", function() SlashCmdList["WOWSOFIT"]("clear") end)
+    startBtn:SetScript("OnClick", function() CmdStart() end)
+    stopBtn:SetScript("OnClick", function() CmdStop() end)
+    clearBtn:SetScript("OnClick", function() CmdClear() end)
 end
 
 function WowSoFitApp:OnShow()
