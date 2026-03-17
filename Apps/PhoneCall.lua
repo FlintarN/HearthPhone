@@ -198,9 +198,10 @@ end
 -- ============================================================
 local function OnAddonMessage(prefix, message, channel, sender)
     if prefix ~= ADDON_PREFIX then return end
-    if sender == GetMyName() then return end
+    if PhonePresence.NamesMatch(sender, GetMyName()) then return end
 
     local msgType = strsplit(":", message, 2)
+    local function isTarget(s) return PhonePresence.NamesMatch(s, callTarget) end
 
     if msgType == "RING" then
         if callState ~= "idle" then
@@ -215,13 +216,13 @@ local function OnAddonMessage(prefix, message, channel, sender)
         UpdateCallUI()
         if PhoneCallApp.ForceShowCall then PhoneCallApp.ForceShowCall() end
     elseif msgType == "ACCEPT" then
-        if callState == "calling" and sender == callTarget then
+        if callState == "calling" and isTarget(sender) then
             callState = "active"
             callTimer = 0
             UpdateCallUI()
         end
     elseif msgType == "DECLINE" then
-        if callState == "calling" and sender == callTarget then
+        if callState == "calling" and isTarget(sender) then
             if statusFs then statusFs:SetText("|cffff4444 Declined|r") end
             C_Timer.After(1.5, function()
                 if callState == "calling" then
@@ -232,7 +233,7 @@ local function OnAddonMessage(prefix, message, channel, sender)
             end)
         end
     elseif msgType == "BUSY" then
-        if callState == "calling" and sender == callTarget then
+        if callState == "calling" and isTarget(sender) then
             if statusFs then statusFs:SetText("|cffff8800 Busy|r") end
             C_Timer.After(1.5, function()
                 if callState == "calling" then
@@ -243,7 +244,7 @@ local function OnAddonMessage(prefix, message, channel, sender)
             end)
         end
     elseif msgType == "HANGUP" then
-        if sender == callTarget then
+        if isTarget(sender) then
             local wasRinging = callState == "ringing"
             callState = "idle"
             callTarget = nil
@@ -657,94 +658,44 @@ function PhoneCallApp:Init(parentFrame)
     -- ========== Build/Refresh Functions ==========
     local ROW_H = 22
 
+    -- Reuse EnsureContactRow for recents (needs callIcon)
     local function EnsureContactRow(parentFrame, list, index)
-        if list[index] then return list[index] end
-        local row = CreateFrame("Button", nil, parentFrame)
-        row:SetHeight(ROW_H)
-
-        local rowBg = row:CreateTexture(nil, "BACKGROUND")
-        rowBg:SetAllPoints()
-        rowBg:SetTexture("Interface\\Buttons\\WHITE8x8")
-        rowBg:SetVertexColor(0.10, 0.10, 0.12, 0.5)
-        row.bg = rowBg
-
-        local rowHl = row:CreateTexture(nil, "HIGHLIGHT")
-        rowHl:SetAllPoints()
-        rowHl:SetTexture("Interface\\Buttons\\WHITE8x8")
-        rowHl:SetVertexColor(0.2, 0.2, 0.2, 0.3)
-
-        local nameFs = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        nameFs:SetPoint("LEFT", 6, 2)
-        nameFs:SetPoint("RIGHT", -40, 2)
-        nameFs:SetJustifyH("LEFT")
-        local nf = nameFs:GetFont()
-        if nf then nameFs:SetFont(nf, 8, "") end
-        row.nameFs = nameFs
-
-        local statusLabel = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        statusLabel:SetPoint("LEFT", 6, -6)
-        statusLabel:SetJustifyH("LEFT")
-        local sf = statusLabel:GetFont()
-        if sf then statusLabel:SetFont(sf, 7, "") end
-        row.statusFs = statusLabel
-
-        -- Call button on the right
-        local callIcon = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        callIcon:SetPoint("RIGHT", -6, 0)
-        callIcon:SetText("|cff44cc44Call|r")
-        local cif = callIcon:GetFont()
-        if cif then callIcon:SetFont(cif, 7, "") end
-        row.callIcon = callIcon
-
-        row:Hide()
-        list[index] = row
-        return row
+        local btn = PhoneFriends:EnsureRow(parentFrame, list, index, { showStatus = true, actionLabel = "Call" })
+        if not btn.callIcon then btn.callIcon = btn.statusFs end  -- alias for recents compatibility
+        return btn
     end
 
     function self:RefreshContacts()
-        local friends = PhoneFriends:GetList()
-        friends = PhoneFriends:Filter(friends, contactSearchText)
-        for _, r in ipairs(contactRows) do r:Hide() end
-
-        local row = 0
-        for _, f in ipairs(friends) do
-            row = row + 1
-            local btn = EnsureContactRow(contactContent, contactRows, row)
-
-            local displayName = PhoneFriends:DisplayName(f)
-
-            btn:ClearAllPoints()
-            btn:SetPoint("TOPLEFT", 0, -((row - 1) * ROW_H))
-            btn:SetPoint("RIGHT", contactContent, "RIGHT", 0, 0)
-
-            if f.isOnline then
-                local hasApp = knownAddonUsers[target] or knownAddonUsers[displayName]
-                local appTag = hasApp and " |cff44cc44[P]|r" or ""
-                btn.nameFs:SetText("|cffffffff" .. displayName .. appTag)
-                if hasApp then
-                    btn.statusFs:SetText("|cff33ff99Online - Has Phone|r")
+        PhoneFriends:RenderList({
+            pool = contactRows,
+            contentFrame = contactContent,
+            scrollFrame = contactScroll,
+            searchText = contactSearchText,
+            rowOpts = { showStatus = true, actionLabel = "Call" },
+            styleRow = function(btn, f, hasAddon)
+                local displayName = PhoneFriends:DisplayName(f)
+                local hpTag = hasAddon and " |cff40c0ff[HP]|r" or ""
+                if f.isOnline then
+                    btn.nameFs:SetText("|cffffffff" .. displayName .. hpTag)
+                    if hasAddon then
+                        btn.statusFs2:SetText("|cff40c0ffHP - Online|r")
+                    else
+                        btn.statusFs2:SetText("|cff33ff99Online|r")
+                    end
+                    btn.statusFs:SetText("|cff44cc44Call|r")
+                    btn.bg:SetVertexColor(0.10, 0.12, 0.10, 0.5)
                 else
-                    btn.statusFs:SetText("|cff33ff99Online|r")
+                    local plain = f.bnetName or f.charName or "?"
+                    btn.nameFs:SetText("|cff666666" .. plain .. "|r")
+                    btn.statusFs2:SetText("|cff666666Offline|r")
+                    btn.statusFs:SetText("|cff444444Call|r")
+                    btn.bg:SetVertexColor(0.10, 0.10, 0.12, 0.3)
                 end
-                btn.callIcon:SetText("|cff44cc44Call|r")
-                btn.bg:SetVertexColor(0.10, 0.12, 0.10, 0.5)
-            else
-                local plain = f.bnetName or f.charName or "?"
-                btn.nameFs:SetText("|cff666666" .. plain .. "|r")
-                btn.statusFs:SetText("|cff666666Offline|r")
-                btn.callIcon:SetText("|cff444444Call|r")
-                btn.bg:SetVertexColor(0.10, 0.10, 0.12, 0.3)
-            end
-
-            local target = PhoneFriends:WhisperTarget(f) or "?"
-            btn:SetScript("OnClick", function()
-                if target ~= "?" then StartCall(target) end
-            end)
-            btn:Show()
-        end
-
-        local contentW = contactScroll:GetWidth() or 150
-        contactContent:SetSize(contentW, math.max(row * ROW_H, 1))
+            end,
+            onClick = function(_, target)
+                StartCall(target)
+            end,
+        })
     end
 
     function self:RefreshRecents()

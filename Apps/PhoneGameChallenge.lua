@@ -41,6 +41,10 @@ local function GetMyName()
     return myName
 end
 
+local function NamesMatch(a, b)
+    return PhonePresence.NamesMatch(a, b)
+end
+
 local function Send(target, msgType, data)
     local payload = msgType
     if data then payload = msgType .. ":" .. data end
@@ -207,7 +211,7 @@ end
 -- ============================================================
 local function OnAddonMessage(prefix, message, channel, sender)
     if prefix ~= ADDON_PREFIX then return end
-    if sender == GetMyName() then return end
+    if NamesMatch(sender, GetMyName()) then return end
 
     local msgType, data = strsplit(":", message, 2)
 
@@ -240,7 +244,7 @@ local function OnAddonMessage(prefix, message, channel, sender)
         end
 
     elseif msgType == "ACCEPT" then
-        if session.state == "challenging" and sender == session.opponent then
+        if session.state == "challenging" and NamesMatch(sender, session.opponent) then
             if session.timeoutTimer then session.timeoutTimer:Cancel(); session.timeoutTimer = nil end
             session.state = "active"
             local game = registeredGames[session.gameId]
@@ -253,7 +257,7 @@ local function OnAddonMessage(prefix, message, channel, sender)
         end
 
     elseif msgType == "DECLINE" then
-        if session.state == "challenging" and sender == session.opponent then
+        if session.state == "challenging" and NamesMatch(sender, session.opponent) then
             if session.timeoutTimer then session.timeoutTimer:Cancel(); session.timeoutTimer = nil end
             local game = registeredGames[session.gameId]
             if game and game.onEnd then game.onEnd("decline") end
@@ -265,7 +269,7 @@ local function OnAddonMessage(prefix, message, channel, sender)
         end
 
     elseif msgType == "BUSY" then
-        if session.state == "challenging" and sender == session.opponent then
+        if session.state == "challenging" and NamesMatch(sender, session.opponent) then
             if session.timeoutTimer then session.timeoutTimer:Cancel(); session.timeoutTimer = nil end
             local game = registeredGames[session.gameId]
             if game and game.onEnd then game.onEnd("busy") end
@@ -277,7 +281,7 @@ local function OnAddonMessage(prefix, message, channel, sender)
         end
 
     elseif msgType == "GAMEDATA" then
-        if session.state == "active" and sender == session.opponent then
+        if session.state == "active" and NamesMatch(sender, session.opponent) then
             local game = registeredGames[session.gameId]
             if game and game.onData then
                 game.onData(sender, data)
@@ -285,7 +289,7 @@ local function OnAddonMessage(prefix, message, channel, sender)
         end
 
     elseif msgType == "FORFEIT" then
-        if sender == session.opponent then
+        if NamesMatch(sender, session.opponent) then
             local game = registeredGames[session.gameId]
             if game and game.onEnd then game.onEnd("forfeit") end
             if game and game.onSessionEnd then game.onSessionEnd("forfeit")
@@ -296,7 +300,7 @@ local function OnAddonMessage(prefix, message, channel, sender)
         end
 
     elseif msgType == "CANCEL" then
-        if session.state == "incoming" and sender == session.opponent then
+        if session.state == "incoming" and NamesMatch(sender, session.opponent) then
             local game = registeredGames[session.gameId]
             if game and game.onEnd then game.onEnd("cancelled") end
             session.state = "idle"

@@ -1500,7 +1500,7 @@ initFrame:SetScript("OnEvent", function(self)
         end
     end)
 
-    -- Initialize shared presence/heartbeat system
+    -- Initialize shared presence/heartbeat system (auto-pings when friends data loads)
     if PhonePresence then PhonePresence:Init() end
 
     -- Initialize built-in apps
@@ -1655,27 +1655,243 @@ chatTitle:SetTextColor(0.9, 0.9, 0.95, 1)
 local ctFont = chatTitle:GetFont()
 if ctFont then chatTitle:SetFont(ctFont, 9, "OUTLINE") end
 
--- Chat message display
-local chatScroll = CreateFrame("ScrollingMessageFrame", nil, chatView)
-chatScroll:SetPoint("TOPLEFT", 4, -16)
-chatScroll:SetPoint("BOTTOMRIGHT", -4, 24)
-chatScroll:SetFontObject(GameFontNormalSmall)
-local csFont = chatScroll:GetFont()
-if csFont then chatScroll:SetFont(csFont, 9, "") end
-chatScroll:SetJustifyH("LEFT")
-chatScroll:SetMaxLines(200)
-chatScroll:SetFading(false)
-chatScroll:SetInsertMode("BOTTOM")
-chatScroll:EnableMouseWheel(true)
-chatScroll:SetScript("OnMouseWheel", function(self, delta)
-    if delta > 0 then self:ScrollUp() else self:ScrollDown() end
-end)
+-- Chat message display (SMS-style bubbles)
+local chatScrollFrame = CreateFrame("ScrollFrame", nil, chatView)
+chatScrollFrame:SetPoint("TOPLEFT", 4, -16)
+chatScrollFrame:SetPoint("BOTTOMRIGHT", -4, 24)
 
 local chatBg = chatView:CreateTexture(nil, "BACKGROUND")
-chatBg:SetPoint("TOPLEFT", chatScroll, -2, 2)
-chatBg:SetPoint("BOTTOMRIGHT", chatScroll, 2, -2)
+chatBg:SetPoint("TOPLEFT", chatScrollFrame, -2, 2)
+chatBg:SetPoint("BOTTOMRIGHT", chatScrollFrame, 2, -2)
 chatBg:SetTexture("Interface\\Buttons\\WHITE8x8")
 chatBg:SetVertexColor(0.05, 0.07, 0.05, 0.8)
+
+local chatContentFrame = CreateFrame("Frame", nil, chatScrollFrame)
+chatContentFrame:SetSize(1, 1)
+chatScrollFrame:SetScrollChild(chatContentFrame)
+
+chatScrollFrame:EnableMouseWheel(true)
+chatScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+    local cur = self:GetVerticalScroll()
+    local maxS = math.max(0, self.maxScroll or 0)
+    self:SetVerticalScroll(math.min(maxS, math.max(0, cur - delta * 30)))
+end)
+
+-- Bubble constants
+local BUBBLE_MAX_W = 140
+local BUBBLE_PAD = 5
+local BUBBLE_SPACING = 2
+local MY_BG_COLOR = {0.15, 0.30, 0.50, 0.85}
+local OTHER_BG_COLOR = {0.20, 0.20, 0.24, 0.85}
+local CHAT_BG_COLOR = {0.05, 0.07, 0.05, 1}
+
+-- Off-screen fontstring for measuring text dimensions
+local measureFrame = CreateFrame("Frame", nil, UIParent)
+measureFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -5000, 0)
+measureFrame:SetSize(200, 200)
+local measureFs = measureFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+measureFs:SetPoint("TOPLEFT")
+local mfFont = measureFs:GetFont()
+if mfFont then measureFs:SetFont(mfFont, 8, "") end
+measureFs:SetWordWrap(true)
+
+-- Bubble pool
+local bubblePool = {}
+local numActiveBubbles = 0
+local chatTotalH = 2
+
+local function ClearAllBubbles()
+    for i = 1, numActiveBubbles do
+        bubblePool[i]:Hide()
+        bubblePool[i].nameFs:Hide()
+        bubblePool[i].timeFs:Hide()
+    end
+    numActiveBubbles = 0
+    chatTotalH = 2
+    chatScrollFrame.maxScroll = 0
+end
+
+-- Stepped corner: 4 horizontal strips per corner for smoother rounding
+--   TL: ####   TR:  ####
+--        ###         ###
+--         ##          ##
+--          #           #
+local function MakeRoundedCorner(parent, corner)
+    local strips = {}
+    local steps = {5, 4, 3, 2, 1}
+    for i, w in ipairs(steps) do
+        local t = parent:CreateTexture(nil, "BORDER")
+        t:SetSize(w, 1)
+        t:SetTexture("Interface\\Buttons\\WHITE8x8")
+        t:SetVertexColor(unpack(CHAT_BG_COLOR))
+        if corner == "TL" then
+            t:SetPoint("TOPLEFT", 0, -(i - 1))
+        elseif corner == "TR" then
+            t:SetPoint("TOPRIGHT", 0, -(i - 1))
+        elseif corner == "BL" then
+            t:SetPoint("BOTTOMLEFT", 0, (i - 1))
+        elseif corner == "BR" then
+            t:SetPoint("BOTTOMRIGHT", 0, (i - 1))
+        end
+        strips[i] = t
+    end
+    return strips
+end
+
+local function AcquireBubble()
+    numActiveBubbles = numActiveBubbles + 1
+    local b = bubblePool[numActiveBubbles]
+    if not b then
+        b = CreateFrame("Frame", nil, chatContentFrame)
+        -- Background fill
+        b.bg = b:CreateTexture(nil, "BACKGROUND")
+        b.bg:SetAllPoints()
+        b.bg:SetTexture("Interface\\Buttons\\WHITE8x8")
+        -- Stepped corner cuts for rounded appearance
+        MakeRoundedCorner(b, "TL")
+        MakeRoundedCorner(b, "TR")
+        MakeRoundedCorner(b, "BL")
+        MakeRoundedCorner(b, "BR")
+        -- Name label (parented to content frame, positioned above bubble)
+        b.nameFs = chatContentFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        local bnf = b.nameFs:GetFont()
+        if bnf then b.nameFs:SetFont(bnf, 7, "") end
+        -- Text label (inside bubble)
+        b.textFs = b:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        b.textFs:SetWordWrap(true)
+        b.textFs:SetJustifyH("LEFT")
+        local btf = b.textFs:GetFont()
+        if btf then b.textFs:SetFont(btf, 8, "") end
+        -- Time label (parented to content frame, positioned below bubble)
+        b.timeFs = chatContentFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        local ttf = b.timeFs:GetFont()
+        if ttf then b.timeFs:SetFont(ttf, 7, "") end
+        bubblePool[numActiveBubbles] = b
+    end
+    b:Show()
+    return b
+end
+
+local function IsGroupChat(ct)
+    return ct == "GUILD" or ct == "PARTY" or ct == "RAID" or ct == "INSTANCE_CHAT"
+end
+
+local function RenderBubble(msgData, yOffset, chatType, prevSender)
+    local b = AcquireBubble()
+    local isMe = msgData.isMe
+    local showName = not isMe and msgData.sender ~= prevSender
+
+    -- Measure natural text width (unconstrained)
+    measureFs:SetWidth(0)
+    measureFs:SetText(msgData.text or "")
+    local natW = measureFs:GetStringWidth() or 50
+
+    -- Determine bubble width
+    local bubbleW = math.min(BUBBLE_MAX_W, math.max(50, natW + BUBBLE_PAD * 2 + 4))
+    local textW = bubbleW - BUBBLE_PAD * 2
+
+    -- Measure text height with wrapping at the chosen width
+    measureFs:SetWidth(textW)
+    measureFs:SetText(msgData.text or "")
+    local textH = math.max(measureFs:GetStringHeight() or 10, 10)
+
+    -- Layout: [name above] [bubble] [time below]
+    local nameH = showName and 11 or 0
+    local bubbleH = BUBBLE_PAD + textH + BUBBLE_PAD
+    local timeH = 10
+
+    -- Name above bubble
+    b.nameFs:ClearAllPoints()
+    if showName then
+        if isMe then
+            b.nameFs:SetPoint("TOPRIGHT", chatContentFrame, "TOPRIGHT", -3, -yOffset)
+        else
+            b.nameFs:SetPoint("TOPLEFT", chatContentFrame, "TOPLEFT", 3, -yOffset)
+        end
+        b.nameFs:SetText("|cff" .. (msgData.color or "33ff99") .. (msgData.sender or "") .. "|r")
+        b.nameFs:Show()
+    else
+        b.nameFs:Hide()
+    end
+
+    -- Bubble (just contains text)
+    local bubbleY = yOffset + nameH
+    b:SetSize(bubbleW, bubbleH)
+    b:ClearAllPoints()
+    if isMe then
+        b:SetPoint("TOPRIGHT", chatContentFrame, "TOPRIGHT", -1, -bubbleY)
+        b.bg:SetVertexColor(unpack(MY_BG_COLOR))
+        b.textFs:SetTextColor(0.92, 0.96, 1, 1)
+    else
+        b:SetPoint("TOPLEFT", chatContentFrame, "TOPLEFT", 1, -bubbleY)
+        b.bg:SetVertexColor(unpack(OTHER_BG_COLOR))
+        b.textFs:SetTextColor(0.88, 0.88, 0.90, 1)
+    end
+
+    -- Message text (inside bubble)
+    b.textFs:ClearAllPoints()
+    b.textFs:SetPoint("TOPLEFT", b, "TOPLEFT", BUBBLE_PAD, -BUBBLE_PAD)
+    b.textFs:SetWidth(textW)
+    b.textFs:SetText(msgData.text or "")
+
+    -- Timestamp below bubble
+    b.timeFs:ClearAllPoints()
+    if isMe then
+        b.timeFs:SetPoint("TOPRIGHT", b, "BOTTOMRIGHT", -2, -1)
+    else
+        b.timeFs:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 2, -1)
+    end
+    b.timeFs:SetText("|cff666666" .. (msgData.time or "") .. "|r")
+    b.timeFs:Show()
+
+    local totalH = nameH + bubbleH + timeH + BUBBLE_SPACING
+    return totalH
+end
+
+local RebuildChat  -- forward declaration
+
+local function ScrollChatToBottom()
+    chatScrollFrame.maxScroll = math.max(0, chatTotalH - chatScrollFrame:GetHeight())
+    chatScrollFrame:SetVerticalScroll(chatScrollFrame.maxScroll)
+end
+
+local function AddChatBubble(msgData, chatType)
+    local convo = conversations[activeConvo]
+    if not convo then return end
+    local prevSender = nil
+    if #convo.messages > 1 then
+        prevSender = convo.messages[#convo.messages - 1].sender
+    end
+    local h = RenderBubble(msgData, chatTotalH, chatType, prevSender)
+    chatTotalH = chatTotalH + h
+    local areaW = chatScrollFrame:GetWidth() or 170
+    chatContentFrame:SetSize(areaW, math.max(chatTotalH, 1))
+    C_Timer.After(0, ScrollChatToBottom)
+end
+
+RebuildChat = function()
+    ClearAllBubbles()
+    if not activeConvo then return end
+    local convo = conversations[activeConvo]
+    if not convo then return end
+    local yOffset = 2
+    local prevSender = nil
+    local startIdx = math.max(1, #convo.messages - 99)
+    for i = startIdx, #convo.messages do
+        local m = convo.messages[i]
+        local h = RenderBubble(m, yOffset, convo.chatType, prevSender)
+        yOffset = yOffset + h
+        prevSender = m.sender
+    end
+    chatTotalH = yOffset
+    local areaW = chatScrollFrame:GetWidth() or 170
+    chatContentFrame:SetSize(areaW, math.max(chatTotalH, 1))
+    C_Timer.After(0, ScrollChatToBottom)
+end
+
+chatScrollFrame:SetScript("OnSizeChanged", function()
+    if activeConvo then C_Timer.After(0, RebuildChat) end
+end)
 
 -- Input box
 local chatInput = CreateFrame("EditBox", nil, chatView, "InputBoxTemplate")
@@ -1722,10 +1938,7 @@ local function OpenConvo(id)
     activeConvo = id
     convo.unread = 0
     chatTitle:SetText("|cff40c0ff" .. convo.name .. "|r")
-    chatScroll:Clear()
-    for _, m in ipairs(convo.messages) do
-        chatScroll:AddMessage(m)
-    end
+    RebuildChat()
     convoListView:Hide()
     if newChatView then newChatView:Hide() end
     chatView:Show()
@@ -1914,8 +2127,11 @@ local function GetAllKnownNames()
             table.insert(names, { name = convo.name, label = convo.name .. " |cff888888(Recent)|r", online = false })
         end
     end
-    -- Sort: online first, then alpha
+    -- Sort: addon users first, then online, then alpha
     table.sort(names, function(a, b)
+        local aAddon = PhonePresence:HasAddon(a.name) and 1 or 0
+        local bAddon = PhonePresence:HasAddon(b.name) and 1 or 0
+        if aAddon ~= bAddon then return aAddon > bAddon end
         if a.online ~= b.online then return a.online end
         return a.name < b.name
     end)
@@ -1993,51 +2209,7 @@ end)
 
 local ncFriendButtons = {}
 
-local function CreateFriendRow(parent, pool, row)
-    local ROW_H = 22
-    local btn = pool[row]
-    if not btn then
-        btn = CreateFrame("Button", nil, parent)
-        btn:SetHeight(ROW_H)
-
-        local bg = btn:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        bg:SetTexture("Interface\\Buttons\\WHITE8x8")
-        bg:SetVertexColor(0.12, 0.12, 0.15, 0.8)
-
-        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints()
-        hl:SetTexture("Interface\\Buttons\\WHITE8x8")
-        hl:SetVertexColor(0.3, 0.3, 0.4, 0.3)
-
-        local nameFs = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        nameFs:SetPoint("LEFT", 6, 0)
-        nameFs:SetPoint("RIGHT", btn, "RIGHT", -50, 0)
-        nameFs:SetJustifyH("LEFT")
-        local bnf = nameFs:GetFont()
-        if bnf then nameFs:SetFont(bnf, 9, "") end
-        btn.nameFs = nameFs
-
-        local statusFs = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        statusFs:SetPoint("RIGHT", -6, 0)
-        statusFs:SetJustifyH("RIGHT")
-        local bsf = statusFs:GetFont()
-        if bsf then statusFs:SetFont(bsf, 8, "") end
-        btn.statusFs = statusFs
-
-        local sep = btn:CreateTexture(nil, "BORDER")
-        sep:SetPoint("BOTTOMLEFT", 4, 0)
-        sep:SetPoint("BOTTOMRIGHT", -4, 0)
-        sep:SetHeight(1)
-        sep:SetTexture("Interface\\Buttons\\WHITE8x8")
-        sep:SetVertexColor(0.25, 0.25, 0.3, 0.4)
-
-        pool[row] = btn
-    end
-    return btn
-end
-
--- Friends list is provided by PhoneFriends shared module
+local ncListOpts  -- forward declare for reuse in delayed refresh
 
 local function OpenNewChat()
     convoListView:Hide()
@@ -2045,49 +2217,28 @@ local function OpenNewChat()
     newChatView:Show()
     ncInput:SetText("")
 
-    for _, btn in ipairs(ncFriendButtons) do btn:Hide() end
-
-    local ROW_H = 22
-    local friends = PhoneFriends:GetList()
-    local row = 0
-
-    for _, f in ipairs(friends) do
-        row = row + 1
-        local btn = CreateFriendRow(ncFriendContent, ncFriendButtons, row)
-
-        local displayName = PhoneFriends:DisplayName(f)
-
-        btn:ClearAllPoints()
-        btn:SetPoint("TOPLEFT", 0, -((row - 1) * ROW_H))
-        btn:SetPoint("RIGHT", ncFriendContent, "RIGHT", 0, 0)
-
-        if f.isOnline then
-            btn.nameFs:SetText("|cffffffff" .. displayName)
-            if f.charName then
-                btn.statusFs:SetText("|cff33ff99Online|r")
-            else
-                btn.statusFs:SetText("|cff66aaff BNet|r")
-            end
-        else
-            local plainName = f.bnetName or f.charName or "?"
-            btn.nameFs:SetText("|cff666666" .. plainName .. "|r")
-            btn.statusFs:SetText("|cff666666Offline|r")
-        end
-
-        local targetName = PhoneFriends:WhisperTarget(f) or "?"
-        btn:SetScript("OnClick", function()
-            if targetName == "?" then return end
-            local convoId = "dm:" .. targetName
-            GetConvo(convoId, targetName, "WHISPER")
+    ncListOpts = {
+        pool = ncFriendButtons,
+        contentFrame = ncFriendContent,
+        scrollFrame = ncFriendScroll,
+        rowOpts = { showSeparator = true },
+        onClick = function(_, target)
+            local convoId = "dm:" .. target
+            GetConvo(convoId, target, "WHISPER")
             RefreshConvoList()
             newChatView:Hide()
             OpenConvo(convoId)
-        end)
-        btn:Show()
-    end
+        end,
+    }
+    PhoneFriends:RenderList(ncListOpts)
 
-    local contentW = ncFriendScroll:GetWidth() or 150
-    ncFriendContent:SetSize(contentW, math.max(row * ROW_H, 1))
+    -- Ping for addon presence and refresh after responses arrive
+    if PhonePresence then PhonePresence:PingFriends() end
+    C_Timer.After(1.5, function()
+        if newChatView:IsShown() then
+            PhoneFriends:RenderList(ncListOpts)
+        end
+    end)
 end
 
 StartChatWithName = function(input)
@@ -2247,11 +2398,14 @@ RefreshConvoList = function()
             end)
         end
 
-        -- Preview (last message, stripped of color codes, truncated)
+        -- Preview (last message, truncated)
         local preview = ""
         if #convo.messages > 0 then
-            preview = convo.messages[#convo.messages]:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-            if #preview > 30 then preview = preview:sub(1, 28) .. ".." end
+            local lastMsg = convo.messages[#convo.messages]
+            local rawText = type(lastMsg) == "table" and lastMsg.text or tostring(lastMsg)
+            rawText = rawText:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+            if #rawText > 30 then rawText = rawText:sub(1, 28) .. ".." end
+            preview = rawText
         end
         btn.previewFs:SetText(preview)
 
@@ -2291,19 +2445,16 @@ local handledCleanupTimer = 0
 local function HandleWhisper(msg, sender, guid)
     local name = Ambiguate(sender, "short")
     local color = "33ff99"
-    -- Try to get class color from GUID
     if guid and guid ~= "" then
         local _, classFile = GetPlayerInfoByGUID(guid)
-        if classFile then
-            color = GetClassColorHex(classFile)
-        end
+        if classFile then color = GetClassColorHex(classFile) end
     end
     local convoId = "dm:" .. name
-    local formatted = format("|cff%s%s|r: %s", color, name, msg)
     local convo = GetConvo(convoId, name, "WHISPER")
-    table.insert(convo.messages, formatted)
+    local msgData = { text = msg, sender = name, isMe = false, time = date("%H:%M"), color = color }
+    table.insert(convo.messages, msgData)
     if activeConvo == convoId then
-        chatScroll:AddMessage(formatted)
+        AddChatBubble(msgData, "WHISPER")
     else
         convo.unread = convo.unread + 1
         ShowNotification(name, msg, convoId)
@@ -2315,11 +2466,11 @@ local function HandleWhisperInform(msg, sender)
     local target = Ambiguate(sender, "short")
     local convoId = "dm:" .. target
     local playerName = UnitName("player")
-    local formatted = format("|cff88bbff%s|r: %s", playerName, msg)
     local convo = GetConvo(convoId, target, "WHISPER")
-    table.insert(convo.messages, formatted)
+    local msgData = { text = msg, sender = playerName, isMe = true, time = date("%H:%M"), color = "88bbff" }
+    table.insert(convo.messages, msgData)
     if activeConvo == convoId then
-        chatScroll:AddMessage(formatted)
+        AddChatBubble(msgData, "WHISPER")
     end
     RefreshConvoList()
 end
@@ -2333,11 +2484,12 @@ msgEvents:SetScript("OnEvent", function(self, event, msg, sender, ...)
             local _, classFile = GetPlayerInfoByGUID(guid)
             if classFile then color = GetClassColorHex(classFile) end
         end
-        local formatted = format("|cff%s%s|r: %s", color, name, msg)
+        local isMe = (name == UnitName("player"))
         local convo = GetConvo("guild", "Guild Chat", "GUILD")
-        table.insert(convo.messages, formatted)
+        local msgData = { text = msg, sender = name, isMe = isMe, time = date("%H:%M"), color = color }
+        table.insert(convo.messages, msgData)
         if activeConvo == "guild" then
-            chatScroll:AddMessage(formatted)
+            AddChatBubble(msgData, "GUILD")
         else
             convo.unread = convo.unread + 1
             ShowNotification("[Guild] " .. name, msg, "guild")
@@ -2346,11 +2498,11 @@ msgEvents:SetScript("OnEvent", function(self, event, msg, sender, ...)
 
     elseif event == "CHAT_MSG_GUILD_ACHIEVEMENT" then
         local name = Ambiguate(sender, "short")
-        local formatted = format("|cffffff00%s earned: %s|r", name, msg)
         local convo = GetConvo("guild", "Guild Chat", "GUILD")
-        table.insert(convo.messages, formatted)
+        local msgData = { text = name .. " earned: " .. msg, sender = "System", isMe = false, time = date("%H:%M"), color = "ffff00" }
+        table.insert(convo.messages, msgData)
         if activeConvo == "guild" then
-            chatScroll:AddMessage(formatted)
+            AddChatBubble(msgData, "GUILD")
         else
             convo.unread = convo.unread + 1
         end
@@ -2370,11 +2522,12 @@ msgEvents:SetScript("OnEvent", function(self, event, msg, sender, ...)
         local convoName = isRaid and "Raid Chat" or "Party Chat"
         local chatType = isRaid and "RAID" or "PARTY"
         local prefix = isRaid and "[Raid] " or "[Party] "
-        local formatted = format("|cff%s%s|r: %s", color, name, msg)
+        local isMe = (name == UnitName("player"))
         local convo = GetConvo(convoId, convoName, chatType)
-        table.insert(convo.messages, formatted)
+        local msgData = { text = msg, sender = name, isMe = isMe, time = date("%H:%M"), color = color }
+        table.insert(convo.messages, msgData)
         if activeConvo == convoId then
-            chatScroll:AddMessage(formatted)
+            AddChatBubble(msgData, chatType)
         else
             convo.unread = convo.unread + 1
             ShowNotification(prefix .. name, msg, convoId)
@@ -2389,11 +2542,12 @@ msgEvents:SetScript("OnEvent", function(self, event, msg, sender, ...)
             local _, classFile = GetPlayerInfoByGUID(guid)
             if classFile then color = GetClassColorHex(classFile) end
         end
-        local formatted = format("|cff%s%s|r: %s", color, name, msg)
+        local isMe = (name == UnitName("player"))
         local convo = GetConvo("instance", "Instance Chat", "INSTANCE_CHAT")
-        table.insert(convo.messages, formatted)
+        local msgData = { text = msg, sender = name, isMe = isMe, time = date("%H:%M"), color = color }
+        table.insert(convo.messages, msgData)
         if activeConvo == "instance" then
-            chatScroll:AddMessage(formatted)
+            AddChatBubble(msgData, "INSTANCE_CHAT")
         else
             convo.unread = convo.unread + 1
             ShowNotification("[Instance] " .. name, msg, "instance")

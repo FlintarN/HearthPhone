@@ -1,6 +1,6 @@
 # HearthPhone
 
-A smartphone-style UI addon for World of Warcraft. Gives your character a fully functional phone with apps, games, messaging, and social features — all inside the game.
+A smartphone addon for World of Warcraft. Gives your character a fully functional phone with apps, games, messaging, and social features — all inside the game.
 
 Type `/phone` to open it.
 
@@ -9,7 +9,7 @@ Type `/phone` to open it.
 ### Communication
 - **Messages** — Guild, Party, Raid, Instance chat and whispers in one unified inbox
 - **Phone** — Ring a friend and they get a popup on their phone
-- **Social Network** — Twitter/Reddit-style feed with posts, comments, emoji reactions, @mentions, and profiles. Syncs with other HearthPhone users
+- **Social Network** — Twitter/Reddit-style feed with posts, comments, emoji reactions, @mentions, and profiles. Syncs with other HearthPhone users on your realm and faction
 
 ### Games
 - **Snake** — Classic snake
@@ -25,7 +25,7 @@ Type `/phone` to open it.
 - **Space Invaders** — Retro arcade shooter
 - **Temple Run** — Endless runner
 - **Subway Surfers** — Lane-dodge runner
-- **Agar.io** — Multiplayer blob eating (syncs with other players!)
+- **Agar.io** — Multiplayer blob eating (syncs with players on your realm and faction)
 - **Survivor** — Top-down roguelike shooter with WASD movement, mouse aiming, waves, loot power-ups
 - **Tower Defense** — Grid-based TD with 3 tower types, upgrades, AoE splash, and escalating difficulty
 

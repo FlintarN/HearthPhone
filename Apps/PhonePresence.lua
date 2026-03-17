@@ -12,6 +12,16 @@ local pingCooldown = 0
 local PING_INTERVAL = 10    -- seconds between ping sweeps
 
 -- ============================================================
+-- Shared utility: compare two character names ignoring realm suffix
+-- e.g. "Ifnotm" matches "Ifnotm-Silvermoon"
+-- ============================================================
+function PhonePresence.NamesMatch(a, b)
+    if not a or not b then return false end
+    if a == b then return true end
+    return Ambiguate(a, "short") == Ambiguate(b, "short")
+end
+
+-- ============================================================
 -- Helpers
 -- ============================================================
 local function GetMyName()
@@ -37,9 +47,11 @@ end
 
 local function MarkUser(sender)
     local shortName = Ambiguate(sender, "short")
+    local bareName = strsplit("-", sender)  -- just "Name" without realm
     local isNew = not knownUsers[sender]
     knownUsers[shortName] = true
     knownUsers[sender] = true
+    if bareName then knownUsers[bareName] = true end
     if isNew then
         for _, cb in ipairs(callbacks) do
             pcall(cb, sender)
@@ -70,10 +82,10 @@ end
 function PhonePresence:PingFriends()
     local now = GetTime()
     if now - pingCooldown < PING_INTERVAL then return end
-    pingCooldown = now
 
     local myRealm = GetNormalizedRealmName() or ""
     local friends = PhoneFriends and PhoneFriends:GetList() or {}
+    local sent = 0
     for _, f in ipairs(friends) do
         if f.isOnline and f.charName then
             if f.gameAccountID then
@@ -81,6 +93,7 @@ function PhonePresence:PingFriends()
                 pcall(function()
                     BNSendGameData(f.gameAccountID, ADDON_PREFIX, "PING")
                 end)
+                sent = sent + 1
             else
                 -- Character friends: only whisper if same realm
                 local theirRealm = f.realmName and f.realmName:gsub("%s+", "") or myRealm
@@ -90,10 +103,15 @@ function PhonePresence:PingFriends()
                         pcall(function()
                             C_ChatInfo.SendAddonMessage(ADDON_PREFIX, "PING", "WHISPER", target)
                         end)
+                        sent = sent + 1
                     end
                 end
             end
         end
+    end
+    -- Only set cooldown if we actually sent pings (friends list may not be loaded yet)
+    if sent > 0 then
+        pingCooldown = now
     end
 end
 
@@ -133,7 +151,7 @@ end
 -- ============================================================
 local function OnPresenceMessage(prefix, message, sender)
     if prefix ~= ADDON_PREFIX then return end
-    if sender == GetMyName() then return end
+    if PhonePresence.NamesMatch(sender, GetMyName()) then return end
 
     if message == "PING" then
         -- Respond via whisper (best effort) so they know we have HearthPhone
@@ -167,6 +185,9 @@ function PhonePresence:Init()
     local eventFrame = CreateFrame("Frame")
     eventFrame:RegisterEvent("CHAT_MSG_ADDON")
     eventFrame:RegisterEvent("BN_CHAT_MSG_ADDON")
+    eventFrame:RegisterEvent("BN_FRIEND_LIST_SIZE_CHANGED")
+    eventFrame:RegisterEvent("FRIENDLIST_UPDATE")
+    local friendListPinged = false
     eventFrame:SetScript("OnEvent", function(_, event, ...)
         if event == "CHAT_MSG_ADDON" then
             local prefix, message, channel, sender = ...
@@ -176,6 +197,13 @@ function PhonePresence:Init()
             local sender = ResolveBNetSender(senderID)
             if sender then
                 OnPresenceMessage(prefix, message, sender)
+            end
+        elseif (event == "BN_FRIEND_LIST_SIZE_CHANGED" or event == "FRIENDLIST_UPDATE") and not friendListPinged then
+            -- Friends data just became available, do the first real ping
+            local numBNet = BNGetNumFriends()
+            if numBNet > 0 then
+                friendListPinged = true
+                PhonePresence:PingFriends()
             end
         end
     end)

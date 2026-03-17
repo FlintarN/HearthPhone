@@ -557,68 +557,22 @@ end
 
 local function RefreshChallengeList()
     if not challengeContent then return end
-    for _, r in ipairs(challengeRows) do r:Hide() end
 
-    local friends = PhoneFriends and PhoneFriends:GetList() or {}
-    friends = PhoneFriends:Filter(friends, challengeSearchText)
-    local ROW_H = 22
-    local row = 0
+    local rowCount = PhoneFriends:RenderList({
+        pool = challengeRows,
+        contentFrame = challengeContent,
+        scrollFrame = challengeScroll,
+        searchText = challengeSearchText,
+        onlineOnly = true,
+        rowOpts = { actionLabel = "Play" },
+        onClick = function(_, target)
+            if PhoneGameChallenge:GetState() ~= "idle" then return end
+            local ok = PhoneGameChallenge:Challenge(target, GAME_ID)
+            if ok then ShowWaitingView(target) end
+        end,
+    })
 
-    for _, f in ipairs(friends) do
-        if f.isOnline then
-            row = row + 1
-            local btn = challengeRows[row]
-            if not btn then
-                btn = CreateFrame("Button", nil, challengeContent)
-                btn:SetHeight(ROW_H)
-
-                local bg = btn:CreateTexture(nil, "BACKGROUND")
-                bg:SetAllPoints()
-                bg:SetTexture("Interface\\Buttons\\WHITE8x8")
-                bg:SetVertexColor(0.10, 0.12, 0.10, 0.5)
-
-                local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-                hl:SetAllPoints()
-                hl:SetTexture("Interface\\Buttons\\WHITE8x8")
-                hl:SetVertexColor(0.2, 0.2, 0.2, 0.3)
-
-                local nameFs = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-                nameFs:SetPoint("LEFT", 6, 0)
-                nameFs:SetPoint("RIGHT", -50, 0)
-                nameFs:SetJustifyH("LEFT")
-                local nf = nameFs:GetFont()
-                if nf then nameFs:SetFont(nf, 8, "") end
-                btn.nameFs = nameFs
-
-                local playLabel = btn:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-                playLabel:SetPoint("RIGHT", -6, 0)
-                playLabel:SetText("|cff44cc44Play|r")
-                local pf = playLabel:GetFont()
-                if pf then playLabel:SetFont(pf, 7, "") end
-
-                challengeRows[row] = btn
-            end
-
-            btn.nameFs:SetText("|cffffffff" .. PhoneFriends:DisplayName(f) .. "|r")
-
-            local target = PhoneFriends:WhisperTarget(f) or "?"
-            btn:SetScript("OnClick", function()
-                if target == "?" then return end
-                if PhoneGameChallenge:GetState() ~= "idle" then return end
-                local ok = PhoneGameChallenge:Challenge(target, GAME_ID)
-                if ok then ShowWaitingView(target) end
-            end)
-
-            btn:ClearAllPoints()
-            btn:SetPoint("TOPLEFT", 0, -((row - 1) * ROW_H))
-            btn:SetPoint("RIGHT", challengeContent, "RIGHT", 0, 0)
-            btn:Show()
-        end
-    end
-
-    challengeContent:SetSize(challengeScroll:GetWidth() or 150, math.max(row * ROW_H, 1))
-
-    if row == 0 then
+    if rowCount == 0 then
         statusText:SetText("|cff666666No online friends.\nBoth need HearthPhone.|r")
     end
 end
@@ -1020,7 +974,13 @@ end
 function PhoneBattleshipGame:OnShow()
     visible = true
     if modeView and modeView:IsShown() then
+        if PhonePresence then PhonePresence:PingFriends() end
         RefreshChallengeList()
+        C_Timer.After(1.5, function()
+            if visible and modeView and modeView:IsShown() then
+                RefreshChallengeList()
+            end
+        end)
     end
 end
 

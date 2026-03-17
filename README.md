@@ -1,6 +1,6 @@
 # HearthPhone
 
-A smartphone-style UI addon for World of Warcraft. Gives your character a fully functional phone with apps, games, messaging, and social features — all inside the game.
+A smartphone addon for World of Warcraft. Gives your character a fully functional phone with apps, games, messaging, and social features — all inside the game.
 
 ![WoW](https://img.shields.io/badge/World%20of%20Warcraft-Retail-blue)
 
@@ -23,7 +23,7 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 ### Communication
 - **Messages** — Guild, Party, Raid, Instance chat and DM whispers in one unified inbox
 - **Phone** — Simulated call UI. Ring a friend and they get a popup on their phone. It's a gimmick — no actual voice chat, just a fun roleplay feature.
-- **Social Network** — Twitter/Reddit-style feed with posts, comments, emoji reactions, @mention tagging, and profile pages. Syncs with other HearthPhone users via addon channels.
+- **Social Network** — Twitter/Reddit-style feed with posts, comments, emoji reactions, @mention tagging, and profile pages. Syncs with other HearthPhone users on your realm and faction.
 
 ### Games
 - **Snake** — Classic snake game
@@ -39,7 +39,7 @@ A smartphone-style UI addon for World of Warcraft. Gives your character a fully 
 - **Space Invaders** — Retro arcade shooter
 - **Temple Run** — Endless runner
 - **Subway Surfers** — Lane-dodge runner
-- **Agar.io** — Multiplayer blob eating game (shared channel, anyone with the addon can join)
+- **Agar.io** — Multiplayer blob eating game (syncs with players on your realm and faction)
 - **Survivor** — Top-down roguelike shooter with WASD movement, mouse aiming, wave-based spawning, 3 monster types, and loot power-ups
 - **Tower Defense** — Grid-based TD with 3 tower types (Arrow, Cannon, Ice), upgrades, AoE splash, and cubic HP scaling
 

@@ -34,22 +34,18 @@ local scrollSpeed, stumbles
 -- Objects
 local obstacles = {}
 local coins = {}
-local turnEvents = {}
-
--- Turn input: player must press matching direction
-local turnInputPending = false  -- a turn is in the reaction zone
-local turnInputDir = nil        -- which direction is needed ("LEFT"/"RIGHT")
-local turnHandled = false       -- player pressed correct direction
 
 -- Timers
-local obsTimer, coinTimer, turnTimer, nextTurnAt
+local obsTimer, coinTimer
 
--- Texture pools
-local obsPool = {}
-local coinPool = {}
-local turnWallPool = {}
-local sidePathPool = {}
-local arrowPool = {}
+-- Texture pools (consolidated to stay under Lua 5.1's 60-upvalue limit)
+local pools = {
+    obs = {},
+    obsPost = {},
+    coin = {},
+    pillarL = {},
+    pillarR = {},
+}
 
 -- Visual elements
 local playerTex
@@ -57,7 +53,10 @@ local pathStrips = {}
 local pathEdgeL = {}
 local pathEdgeR = {}
 local tileLines = {}
-local monkeyTex, monkeyGlow
+local livesFs
+local stumbleFs, stumbleTimer
+local hintFs
+local hitFlash
 
 -- ============================================================
 -- Perspective math
@@ -81,30 +80,7 @@ local function PathHalfW(screenY)
     return LANE_SPACING_BOT * (LANES + 0.4) * s * 0.5
 end
 
--- ============================================================
--- Turn offset: path bends at turn points
--- Returns horizontal pixel offset for a given screenY
--- ============================================================
-local function GetTurnOffset(screenY)
-    local offset = 0
-    for _, t in ipairs(turnEvents) do
-        if screenY > t.scrollY and t.scrollY > 0 then
-            -- Above the turn point: path curves away
-            local dist = screenY - t.scrollY
-            local maxBend = 60  -- max pixel offset
-            local bendFrac = dist / 80
-            if bendFrac > 1 then bendFrac = 1 end
-            -- Smooth ease-in curve
-            local bend = maxBend * bendFrac * bendFrac
-            if t.dir == "LEFT" then
-                offset = offset - bend
-            else
-                offset = offset + bend
-            end
-        end
-    end
-    return offset
-end
+-- Turn offset is always 0 — turns are camera-clip events, path stays straight
 
 -- ============================================================
 -- Frame pool helpers
@@ -119,11 +95,11 @@ local function EnsurePool(pool, count, layer, sublayer)
 end
 
 local function EnsureCoinPool(count)
-    while #coinPool < count do
+    while #pools.coin < count do
         local tex = gameFrame:CreateTexture(nil, "ARTWORK", nil, 2)
         tex:SetTexture(SPRITE_PATH .. "SpriteRunCoin")
         tex:Hide()
-        coinPool[#coinPool + 1] = tex
+        pools.coin[#pools.coin + 1] = tex
     end
 end
 
@@ -163,7 +139,7 @@ local function UpdatePath()
         local midY = y + stripH / 2
         local s = PerspScale(midY)
         local halfW = LANE_SPACING_BOT * (LANES + 0.4) * s * 0.5
-        local cx = fw / 2 + GetTurnOffset(midY)
+        local cx = fw / 2
         local edgeW = math.max(2 * s, 1)
 
         -- Alternate stone colors
@@ -187,6 +163,7 @@ local function UpdatePath()
 end
 
 local tileScrollOffset = 0
+local pillarScrollOffset = 0
 
 local function UpdateTileLines(dt)
     if not tileLines[1] then return end
@@ -204,7 +181,7 @@ local function UpdateTileLines(dt)
         if baseY >= 0 and baseY < fh then
             local s = PerspScale(baseY)
             local halfW = LANE_SPACING_BOT * (LANES + 0.4) * s * 0.5
-            local cx = fw / 2 + GetTurnOffset(baseY)
+            local cx = fw / 2
             tileLines[i]:ClearAllPoints()
             tileLines[i]:SetSize(halfW * 2 - 4 * s, math.max(1, 1 * s))
             tileLines[i]:SetPoint("BOTTOMLEFT", gameFrame, "BOTTOMLEFT",
@@ -221,36 +198,29 @@ end
 -- ============================================================
 local function SpawnObstacle()
     local lane = math.random(1, LANES)
+    -- Two types only: "jump" (ground obstacle) and "beam" (overhead, slide under)
     local kind
-    if distance < 40 then
-        kind = math.random(1, 2) == 1 and "root" or "fire"
-    elseif distance < 100 then
-        local r = math.random(1, 10)
-        if r <= 4 then kind = "root"
-        elseif r <= 6 then kind = "fire"
-        elseif r <= 8 then kind = "beam"
-        else kind = "gap" end
+    if distance < 50 then
+        -- Early game: jump only, learn the basics
+        kind = "jump"
     else
-        local r = math.random(1, 12)
-        if r <= 3 then kind = "root"
-        elseif r <= 5 then kind = "fire"
-        elseif r <= 7 then kind = "beam"
-        elseif r <= 9 then kind = "gap"
-        else
-            kind = math.random(1, 2) == 1 and "root" or "fire"
-            local lane2 = lane
-            while lane2 == lane do lane2 = math.random(1, LANES) end
-            table.insert(obstacles, {
-                lane = lane2,
-                scrollY = (frameH or 200) + 20,
-                kind = kind,
-                passed = false,
-            })
-        end
+        -- Mix in beams after 50m
+        kind = math.random(1, 3) == 1 and "beam" or "jump"
+    end
+    -- Occasionally spawn in two lanes at higher distance
+    if distance > 120 and math.random(1, 5) == 1 then
+        local lane2 = lane
+        while lane2 == lane do lane2 = math.random(1, LANES) end
+        table.insert(obstacles, {
+            lane = lane2,
+            scrollY = (frameH or 200) + 40,
+            kind = kind,
+            passed = false,
+        })
     end
     table.insert(obstacles, {
         lane = lane,
-        scrollY = (frameH or 200) + 20,
+        scrollY = (frameH or 200) + 40,
         kind = kind,
         passed = false,
     })
@@ -267,16 +237,6 @@ local function SpawnCoinTrail()
             collected = false,
         })
     end
-end
-
-local function SpawnTurn()
-    local dir = math.random(1, 2) == 1 and "LEFT" or "RIGHT"
-    table.insert(turnEvents, {
-        scrollY = (frameH or 200) + 60,
-        dir = dir,
-        handled = false,
-        reactionZone = false,
-    })
 end
 
 -- ============================================================
@@ -296,34 +256,29 @@ local function ResetGame()
     distance = 0
     gameOver = false
     gameActive = false
-    scrollSpeed = 70
+    scrollSpeed = 50
     stumbles = 0
     lastTime = 0
     obsTimer = 0
     coinTimer = 0
-    turnTimer = 0
-    nextTurnAt = 5 + math.random() * 3
     tileScrollOffset = 0
-    turnInputPending = false
-    turnInputDir = nil
-    turnHandled = false
+    pillarScrollOffset = 0
 
     wipe(obstacles)
     wipe(coins)
-    wipe(turnEvents)
-    for _, f in ipairs(obsPool) do f:Hide() end
-    for _, f in ipairs(coinPool) do f:Hide() end
-    for _, f in ipairs(turnWallPool) do f:Hide() end
-    for _, f in ipairs(sidePathPool) do f:Hide() end
-    for _, f in ipairs(arrowPool) do f:Hide() end
+    for _, p in pairs(pools) do
+        for _, f in ipairs(p) do f:Hide() end
+    end
+    if hitFlash then hitFlash:Hide() end
 
     scoreFs:SetText("|cffffffff0m|r")
     coinFs:SetText("|cffffff000|r")
     msgFs:SetText("")
     startMsg:Show()
 
-    if monkeyTex then monkeyTex:Hide() end
-    if monkeyGlow then monkeyGlow:Hide() end
+    if livesFs then livesFs:SetText("|cffff0000<3 <3 <3|r") end
+    if stumbleFs then stumbleFs:SetText(""); stumbleTimer = 0 end
+    if hintFs then hintFs:Hide() end
 
     playerTex:ClearAllPoints()
     playerTex:SetSize(PLAYER_W, PLAYER_H)
@@ -339,18 +294,19 @@ local function PlayerHitsObs(obs)
     if obs.lane ~= playerLane then return false end
     local obsScreenY = obs.scrollY
     local s = PerspScale(obsScreenY)
-    local obsH = 16 * s
-    if obsScreenY > PLAYER_Y + PLAYER_H or obsScreenY + obsH < PLAYER_Y then
+    local obsH = 12 * s
+    -- Collision at feet level: obstacle must overlap player's foot zone (PLAYER_Y to PLAYER_Y + 8)
+    local footTop = PLAYER_Y + 8
+    if obsScreenY > footTop or obsScreenY + obsH < PLAYER_Y then
         return false
     end
-    if obs.kind == "root" or obs.kind == "fire" then
+    if obs.kind == "jump" then
+        -- Ground obstacle: jump clears it
         if jumpOffset > 8 then return false end
         return true
     elseif obs.kind == "beam" then
+        -- Overhead beam: slide under it
         if isDucking then return false end
-        return true
-    elseif obs.kind == "gap" then
-        if jumpOffset > 4 then return false end
         return true
     end
     return false
@@ -372,9 +328,9 @@ local function OnUpdate()
     local fh = frameH or 200
     local fw = frameW or 140
 
-    -- Speed ramp
-    scrollSpeed = 70 + distance * 0.4
-    if scrollSpeed > 200 then scrollSpeed = 200 end
+    -- Speed ramp (starts slower, ramps up gradually)
+    scrollSpeed = 50 + distance * 0.35
+    if scrollSpeed > 180 then scrollSpeed = 180 end
 
     -- Distance scoring
     distance = distance + scrollSpeed * dt * 0.15
@@ -398,8 +354,8 @@ local function OnUpdate()
 
     -- Spawn obstacles
     obsTimer = obsTimer + dt
-    local obsInterval = 1.0 - distance * 0.003
-    if obsInterval < 0.45 then obsInterval = 0.45 end
+    local obsInterval = 1.4 - distance * 0.003
+    if obsInterval < 0.5 then obsInterval = 0.5 end
     if obsTimer >= obsInterval then
         obsTimer = 0
         SpawnObstacle()
@@ -410,14 +366,6 @@ local function OnUpdate()
     if coinTimer >= 1.5 then
         coinTimer = 0
         SpawnCoinTrail()
-    end
-
-    -- Spawn turns
-    turnTimer = turnTimer + dt
-    if turnTimer >= nextTurnAt and distance > 30 then
-        turnTimer = 0
-        nextTurnAt = 4 + math.random() * 4
-        SpawnTurn()
     end
 
     -- Move obstacles
@@ -444,50 +392,43 @@ local function OnUpdate()
         table.remove(coins, toRm[ri])
     end
 
-    -- Move turns + handle turn logic
-    turnInputPending = false
-    turnInputDir = nil
-    toRm = {}
-    for i, t in ipairs(turnEvents) do
-        t.scrollY = t.scrollY - scrollSpeed * dt * 0.85
-
-        -- Reaction zone: turn is close to player (within ~50px above)
-        local REACT_TOP = PLAYER_Y + 60
-        local REACT_BOT = PLAYER_Y - 5
-
-        if t.scrollY < REACT_TOP and t.scrollY > REACT_BOT and not t.handled then
-            turnInputPending = true
-            turnInputDir = t.dir
-
-            -- Check if player already pressed correct direction
-            if turnHandled then
-                t.handled = true
-                turnHandled = false
-            end
-        end
-
-        -- Turn passed player without being handled = crash into wall
-        if t.scrollY <= REACT_BOT and not t.handled then
-            t.handled = true
-            gameOver = true
-        end
-
-        if t.scrollY < -80 then
-            table.insert(toRm, i)
-        end
-    end
-    for ri = #toRm, 1, -1 do
-        table.remove(turnEvents, toRm[ri])
-    end
-
     -- Collision: obstacles
     for _, obs in ipairs(obstacles) do
         if not obs.passed and PlayerHitsObs(obs) then
             stumbles = stumbles + 1
+            obs.passed = true
             if stumbles >= 3 then
                 gameOver = true
             else
-                obs.passed = true
+                -- Show stumble reason
+                if stumbleFs then
+                    local reason
+                    if obs.kind == "jump" then
+                        reason = "Press W to jump!"
+                    elseif obs.kind == "beam" then
+                        reason = "Press S to slide!"
+                    end
+                    stumbleFs:SetText("|cffff6644" .. (reason or "Ouch!") .. "|r")
+                    stumbleTimer = 2.0
+                end
+                -- Red flash
+                if hitFlash then
+                    hitFlash:Show()
+                    C_Timer.After(0.15, function() if hitFlash then hitFlash:Hide() end end)
+                end
+                -- Update lives display
+                if livesFs then
+                    local hearts = 3 - stumbles
+                    local txt = ""
+                    for h = 1, 3 do
+                        if h <= hearts then
+                            txt = txt .. "|cffff0000<3|r"
+                        else
+                            txt = txt .. "|cff444444<3|r"
+                        end
+                    end
+                    livesFs:SetText(txt)
+                end
             end
         elseif obs.scrollY < PLAYER_Y - 10 and not obs.passed then
             obs.passed = true
@@ -521,130 +462,160 @@ local function OnUpdate()
     -- DRAW
     -- ==============================
 
+    -- Pillars along path edges (stone columns like temple ruins)
+    local PILLAR_SPACING = 40
+    pillarScrollOffset = pillarScrollOffset + scrollSpeed * dt
+    if pillarScrollOffset >= PILLAR_SPACING then
+        pillarScrollOffset = pillarScrollOffset - PILLAR_SPACING
+    end
+    local pillarOffset = pillarScrollOffset
+    local pIdx = 0
+    for i = 0, 7 do
+        local baseY = i * PILLAR_SPACING - pillarOffset
+        if baseY >= 0 and baseY < fh then
+            local s = PerspScale(baseY)
+            local halfW = PathHalfW(baseY)
+            local cx = fw / 2
+            local pilW = math.max(4 * s, 2)
+            local pilH = math.max(14 * s, 3)
+
+            -- Left pillar
+            pIdx = pIdx + 1
+            EnsurePool(pools.pillarL, pIdx, "ARTWORK", 1)
+            local lp = pools.pillarL[pIdx]
+            lp:ClearAllPoints()
+            lp:SetVertexColor(0.35, 0.30, 0.22, 1)
+            lp:SetSize(pilW, pilH)
+            lp:SetPoint("BOTTOM", gameFrame, "BOTTOMLEFT", cx - halfW - pilW, baseY)
+            lp:Show()
+
+            -- Right pillar
+            EnsurePool(pools.pillarR, pIdx, "ARTWORK", 1)
+            local rp = pools.pillarR[pIdx]
+            rp:ClearAllPoints()
+            rp:SetVertexColor(0.35, 0.30, 0.22, 1)
+            rp:SetSize(pilW, pilH)
+            rp:SetPoint("BOTTOM", gameFrame, "BOTTOMLEFT", cx + halfW, baseY)
+            rp:Show()
+        end
+    end
+    for i = pIdx + 1, #pools.pillarL do pools.pillarL[i]:Hide() end
+    for i = pIdx + 1, #pools.pillarR do pools.pillarR[i]:Hide() end
+
+    -- Stumble feedback timer
+    if stumbleTimer and stumbleTimer > 0 then
+        stumbleTimer = stumbleTimer - dt
+        if stumbleTimer <= 0 and stumbleFs then
+            stumbleFs:SetText("")
+        end
+    end
+
+    -- Obstacle approach hint
+    local showingHint = false
+    for _, obs in ipairs(obstacles) do
+        if not obs.passed and obs.lane == playerLane
+            and obs.scrollY > PLAYER_Y and obs.scrollY < PLAYER_Y + 120 then
+            showingHint = true
+            if hintFs then
+                if obs.kind == "jump" then
+                    hintFs:SetText("|cff44ff44^ JUMP ^|r")
+                elseif obs.kind == "beam" then
+                    hintFs:SetText("|cff44aaff- SLIDE -|r")
+                end
+                hintFs:Show()
+            end
+            break
+        end
+    end
+    if not showingHint and hintFs then
+        hintFs:Hide()
+    end
+
     -- Player (offset by turn bending at player Y)
     local pH = isDucking and DUCK_H or PLAYER_H
     local pY = PLAYER_Y + jumpOffset
-    local pTurnOff = GetTurnOffset(PLAYER_Y)
     playerTex:ClearAllPoints()
     playerTex:SetSize(PLAYER_W, pH)
     playerTex:SetPoint("BOTTOM", gameFrame, "BOTTOMLEFT",
-        LaneX(playerLane, PLAYER_Y) + pTurnOff, pY)
-
-    -- Demon monkey
-    if stumbles > 0 and monkeyTex then
-        local alpha = stumbles * 0.35
-        if alpha > 1 then alpha = 1 end
-        monkeyTex:SetAlpha(alpha)
-        monkeyTex:Show()
-        monkeyGlow:SetAlpha(alpha * 0.5)
-        monkeyGlow:Show()
-    elseif monkeyTex then
-        monkeyTex:Hide()
-        monkeyGlow:Hide()
-    end
+        LaneX(playerLane, PLAYER_Y), pY)
 
     -- Obstacles (positioned with turn offset)
     local obsCount = 0
+    local postCount = 0
     for _, obs in ipairs(obstacles) do
         if obs.scrollY > 0 and obs.scrollY < fh + 10 then
             obsCount = obsCount + 1
-            EnsurePool(obsPool, obsCount, "ARTWORK", 4)
-            local tex = obsPool[obsCount]
+            EnsurePool(pools.obs, obsCount, "ARTWORK", 4)
+            local tex = pools.obs[obsCount]
             local s = PerspScale(obs.scrollY)
             local w = 18 * s
             local h = 12 * s
-            local tOff = GetTurnOffset(obs.scrollY)
+            local cx = LaneX(obs.lane, obs.scrollY)
 
-            tex:ClearAllPoints()
-            tex:SetSize(math.max(w, 2), math.max(h, 2))
-            tex:SetPoint("BOTTOM", gameFrame, "BOTTOMLEFT",
-                LaneX(obs.lane, obs.scrollY) + tOff, obs.scrollY)
+            if obs.kind == "jump" then
+                -- Hurdle: horizontal bar on top of two posts
+                local barW = math.max(w * 1.3, 5)
+                local barH = math.max(3 * s, 2)
+                local postW = math.max(3 * s, 2)
+                local postH = math.max(h * 0.8, 4)
 
-            if obs.kind == "root" then
-                tex:SetVertexColor(0.35, 0.25, 0.12, 1)
-            elseif obs.kind == "fire" then
-                tex:SetVertexColor(0.9, 0.35, 0.05, 1)
+                -- Bar (top crossbar) — bright orange
+                tex:ClearAllPoints()
+                tex:SetVertexColor(0.95, 0.4, 0.05, 1)
+                tex:SetSize(barW, barH)
+                tex:SetPoint("BOTTOM", gameFrame, "BOTTOMLEFT", cx, obs.scrollY + postH)
+                tex:Show()
+
+                -- Left post
+                postCount = postCount + 1
+                EnsurePool(pools.obsPost, postCount, "ARTWORK", 3)
+                local lPost = pools.obsPost[postCount]
+                lPost:ClearAllPoints()
+                lPost:SetVertexColor(0.7, 0.3, 0.05, 1)
+                lPost:SetSize(postW, postH)
+                lPost:SetPoint("BOTTOM", gameFrame, "BOTTOMLEFT", cx - barW * 0.35, obs.scrollY)
+                lPost:Show()
+
+                -- Right post
+                postCount = postCount + 1
+                EnsurePool(pools.obsPost, postCount, "ARTWORK", 3)
+                local rPost = pools.obsPost[postCount]
+                rPost:ClearAllPoints()
+                rPost:SetVertexColor(0.7, 0.3, 0.05, 1)
+                rPost:SetSize(postW, postH)
+                rPost:SetPoint("BOTTOM", gameFrame, "BOTTOMLEFT", cx + barW * 0.35, obs.scrollY)
+                rPost:Show()
+
             elseif obs.kind == "beam" then
-                tex:SetVertexColor(0.30, 0.22, 0.10, 1)
-                tex:SetSize(math.max(w * 1.3, 3), math.max(h * 0.5, 2))
-            elseif obs.kind == "gap" then
-                tex:SetVertexColor(0.02, 0.02, 0.02, 1)
-                tex:SetSize(math.max(w * 1.2, 3), math.max(h * 0.8, 2))
-            end
-            tex:Show()
-        end
-    end
-    for i = obsCount + 1, #obsPool do obsPool[i]:Hide() end
-
-    -- Turn walls + direction arrows on ground
-    local twCount = 0
-    local arCount = 0
-    for _, t in ipairs(turnEvents) do
-        -- Wall at the turn point
-        if t.scrollY > -20 and t.scrollY < fh + 20 then
-            twCount = twCount + 1
-            EnsurePool(turnWallPool, twCount, "ARTWORK", 5)
-            local tex = turnWallPool[twCount]
-            local s = PerspScale(t.scrollY)
-            local halfW = PathHalfW(t.scrollY)
-            local cx = fw / 2 + GetTurnOffset(t.scrollY)
-            local wallH = math.max(22 * s, 3)
-
-            tex:ClearAllPoints()
-            tex:SetVertexColor(0.45, 0.38, 0.28, 0.95)
-            tex:SetSize(halfW * 2, wallH)
-            tex:SetPoint("BOTTOM", gameFrame, "BOTTOMLEFT", cx, t.scrollY)
-            tex:Show()
-        end
-
-        -- Arrow indicators on the path approaching the turn
-        -- Draw 3 arrows below the turn point (between turn and player)
-        for a = 1, 3 do
-            local arrowY = t.scrollY - a * 18
-            if arrowY > 5 and arrowY < fh then
-                arCount = arCount + 1
-                EnsurePool(arrowPool, arCount, "ARTWORK", 3)
-                local atex = arrowPool[arCount]
-                local aS = PerspScale(arrowY)
-                local aCx = fw / 2 + GetTurnOffset(arrowY)
-                local arrowW = math.max(10 * aS, 3)
-                local arrowH = math.max(4 * aS, 2)
-
-                -- Offset arrow in the turn direction to hint where to go
-                local arrowOff = (t.dir == "LEFT") and (-8 * aS) or (8 * aS)
-
-                atex:ClearAllPoints()
-                -- Gold/yellow arrow color, pulsing with distance
-                local pulse = 0.7 + 0.3 * math.abs(math.sin(now * 4 + a))
-                atex:SetVertexColor(0.9 * pulse, 0.7 * pulse, 0.1, 0.8)
-                atex:SetSize(arrowW, arrowH)
-                atex:SetPoint("CENTER", gameFrame, "BOTTOMLEFT",
-                    aCx + arrowOff, arrowY)
-                atex:Show()
+                -- Wide blue-grey beam across path — slide under
+                tex:ClearAllPoints()
+                tex:SetVertexColor(0.3, 0.4, 0.55, 1)
+                tex:SetSize(math.max(w * 2.0, 5), math.max(h * 0.3, 2))
+                tex:SetPoint("BOTTOM", gameFrame, "BOTTOMLEFT", cx, obs.scrollY + h * 0.6)
+                tex:Show()
             end
         end
     end
-    for i = twCount + 1, #turnWallPool do turnWallPool[i]:Hide() end
-    for i = arCount + 1, #arrowPool do arrowPool[i]:Hide() end
+    for i = obsCount + 1, #pools.obs do pools.obs[i]:Hide() end
+    for i = postCount + 1, #pools.obsPost do pools.obsPost[i]:Hide() end
 
-    -- Coins (with turn offset)
+    -- Coins
     local cCount = 0
     for _, c in ipairs(coins) do
         if not c.collected and c.scrollY > 0 and c.scrollY < fh + 10 then
             cCount = cCount + 1
             EnsureCoinPool(cCount)
-            local tex = coinPool[cCount]
+            local tex = pools.coin[cCount]
             local s = PerspScale(c.scrollY)
             local sz = math.max(8 * s, 2)
-            local tOff = GetTurnOffset(c.scrollY)
             tex:ClearAllPoints()
             tex:SetSize(sz, sz)
             tex:SetPoint("CENTER", gameFrame, "BOTTOMLEFT",
-                LaneX(c.lane, c.scrollY) + tOff, c.scrollY)
+                LaneX(c.lane, c.scrollY), c.scrollY)
             tex:Show()
         end
     end
-    for i = cCount + 1, #coinPool do coinPool[i]:Hide() end
+    for i = cCount + 1, #pools.coin do pools.coin[i]:Hide() end
 end
 
 -- ============================================================
@@ -663,16 +634,9 @@ local function HandleInput(key)
     end
 
     if key == "LEFT" or key == "a" or key == "A" then
-        -- Check if this is a turn response
-        if turnInputPending and turnInputDir == "LEFT" then
-            turnHandled = true
-        end
         if playerLane > 1 then playerLane = playerLane - 1 end
         return true
     elseif key == "RIGHT" or key == "d" or key == "D" then
-        if turnInputPending and turnInputDir == "RIGHT" then
-            turnHandled = true
-        end
         if playerLane < LANES then playerLane = playerLane + 1 end
         return true
     elseif key == "UP" or key == "w" or key == "W" or key == "SPACE" then
@@ -723,16 +687,8 @@ local function HandleClick(localX, localY)
         if not isJumping then isDucking = true end
         C_Timer.After(0.4, function() isDucking = false end)
     elseif localX < thirdW then
-        -- Left: turn response + dodge
-        if turnInputPending and turnInputDir == "LEFT" then
-            turnHandled = true
-        end
         if playerLane > 1 then playerLane = playerLane - 1 end
     elseif localX > fw - thirdW then
-        -- Right: turn response + dodge
-        if turnInputPending and turnInputDir == "RIGHT" then
-            turnHandled = true
-        end
         if playerLane < LANES then playerLane = playerLane + 1 end
     else
         -- Center: jump
@@ -798,29 +754,40 @@ function PhoneTempleRunGame:Init(parentFrame)
     playerTex:SetSize(PLAYER_W, PLAYER_H)
     playerTex:SetTexture(SPRITE_PATH .. "SpriteRunner")
 
-    -- Demon monkey (red eyes at top)
-    monkeyGlow = gameFrame:CreateTexture(nil, "OVERLAY", nil, 6)
-    monkeyGlow:SetSize(60, 30)
-    monkeyGlow:SetPoint("TOP", gameFrame, "TOP", 0, 0)
-    monkeyGlow:SetTexture(WHITE)
-    monkeyGlow:SetVertexColor(0.6, 0.0, 0.0, 0.5)
-    monkeyGlow:Hide()
+    -- Hit flash overlay (full screen red flash on damage)
+    hitFlash = gameFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+    hitFlash:SetAllPoints()
+    hitFlash:SetTexture(WHITE)
+    hitFlash:SetVertexColor(0.8, 0.0, 0.0, 0.4)
+    hitFlash:Hide()
 
-    monkeyTex = gameFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    monkeyTex:SetPoint("TOP", gameFrame, "TOP", 0, -2)
-    local mkf = monkeyTex:GetFont()
-    if mkf then monkeyTex:SetFont(mkf, 14, "OUTLINE") end
-    monkeyTex:SetText("|cffff0000> . <|r")
-    monkeyTex:Hide()
+    -- Lives display (top left of game area)
+    livesFs = gameFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    livesFs:SetPoint("TOPLEFT", gameFrame, "TOPLEFT", 4, -2)
+    local lvf = livesFs:GetFont()
+    if lvf then livesFs:SetFont(lvf, 9, "OUTLINE") end
+    livesFs:SetText("|cffff0000<3 <3 <3|r")
+
+    -- Stumble feedback (center, below top)
+    stumbleFs = gameFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    stumbleFs:SetPoint("TOP", gameFrame, "TOP", 0, -16)
+    local stf = stumbleFs:GetFont()
+    if stf then stumbleFs:SetFont(stf, 8, "OUTLINE") end
+
+    -- Obstacle hint (above player)
+    hintFs = gameFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hintFs:SetPoint("BOTTOM", gameFrame, "BOTTOMLEFT", (frameW or 140) / 2, PLAYER_Y + PLAYER_H + 20)
+    local hf = hintFs:GetFont()
+    if hf then hintFs:SetFont(hf, 8, "OUTLINE") end
+    hintFs:Hide()
 
     -- Start message
     startMsg = gameFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     startMsg:SetPoint("CENTER", 0, 20)
     startMsg:SetText("|cff888888Click or press a key!\n\n"
-        .. "|cffddaa44Left/Right|r|cff888888 = dodge + turn\n"
-        .. "|cffddaa44Up/Space|r|cff888888 = jump\n"
-        .. "|cffddaa44Down|r|cff888888 = slide\n\n"
-        .. "Follow where the path goes!|r")
+        .. "|cffddaa44A / D|r|cff888888 = switch lane\n"
+        .. "|cffddaa44W|r|cff888888 = jump over |r|cffee6622blocks|r\n"
+        .. "|cffddaa44S|r|cff888888 = slide under |r|cff4466aabeams|r")
     local smf = startMsg:GetFont()
     if smf then startMsg:SetFont(smf, 8, "") end
 
